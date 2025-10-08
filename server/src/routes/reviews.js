@@ -2,9 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const reviewController = require('../controllers/reviewController');
-const { authenticateToken } = require('../middleware/auth');
+const {protect: authenticateToken } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/roleAuth');
-const upload = require('../middleware/upload');
+const { uploadMultiple } = require('../middleware/upload');
+
 
 // @route   GET /api/reviews
 // @desc    Get all reviews
@@ -24,12 +25,12 @@ router.get('/:id', reviewController.getReviewById);
 // @route   POST /api/reviews
 // @desc    Create review
 // @access  Private
-router.post('/', authenticateToken, upload.array('images', 5), reviewController.createReview);
+router.post('/', authenticateToken, uploadMultiple('images', 5), reviewController.createReview);
 
 // @route   PUT /api/reviews/:id
 // @desc    Update review
 // @access  Private
-router.put('/:id', authenticateToken, upload.array('images', 5), reviewController.updateReview);
+router.put('/:id', authenticateToken, uploadMultiple('images', 5), reviewController.updateReview);
 
 // @route   PUT /api/reviews/:id/status
 // @desc    Update review status (Approve/Reject)

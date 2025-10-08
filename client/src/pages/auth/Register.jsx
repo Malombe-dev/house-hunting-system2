@@ -39,12 +39,24 @@ const Register = () => {
     
     try {
       const result = await registerUser(data);
-      
       if (result.success) {
-        // Navigate based on user role
+        // Always redirect to dashboard regardless of verification status
         const redirectPath = getRoleBasedRedirect(result.user.role);
         navigate(redirectPath, { replace: true });
       }
+      
+       
+   
+      // if (result.success) {
+      //   if (!result.user.verified) {
+      //     // Redirect to Verify Email page instead of dashboard
+      //     navigate('/verify-email', { state: { email: result.user.email } });
+      //   } else {
+      //     const redirectPath = getRoleBasedRedirect(result.user.role);
+      //     navigate(redirectPath, { replace: true });
+      //   }
+      // }
+      
     } catch (error) {
       console.error('Registration error:', error);
     } finally {
@@ -330,9 +342,10 @@ const Register = () => {
                   {...register('email', {
                     required: 'Email is required',
                     pattern: {
-                      value: /^\S+@\S+$/i,
+                      value: /^\S+@\S+\.\S+$/,
                       message: 'Invalid email address'
                     }
+                    
                   })}
                   className={`input-field ${errors.email ? 'input-error' : ''}`}
                   placeholder="john@example.com"

@@ -15,6 +15,7 @@ const authService = {
   register: async (userData) => {
     try {
       const response = await apiMethods.post('/auth/register', userData);
+      console.log('Raw register response:', response);
       return response;
     } catch (error) {
       throw error;

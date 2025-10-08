@@ -50,6 +50,7 @@ const userSchema = new mongoose.Schema({
   verificationToken: String,
   verificationTokenExpires: Date,
   resetPasswordToken: String,
+  lastVerificationSentAt: Date,
   resetPasswordExpires: Date,
   isActive: {
     type: Boolean,

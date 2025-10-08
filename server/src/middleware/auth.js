@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// Verify JWT token
+// Protect routes - require authentication
 exports.protect = async (req, res, next) => {
   try {
     let token;
@@ -11,11 +11,11 @@ exports.protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     }
 
-    // Check if token exists
+    // Make sure token exists
     if (!token) {
       return res.status(401).json({
         status: 'error',
-        message: 'Not authorized to access this route. Please login.'
+        message: 'Not authorized to access this route'
       });
     }
 
@@ -29,30 +29,27 @@ exports.protect = async (req, res, next) => {
       if (!req.user) {
         return res.status(401).json({
           status: 'error',
-          message: 'User not found'
+          message: 'User no longer exists'
         });
       }
 
       // Check if user is active
       if (!req.user.isActive) {
-        return res.status(403).json({
+        return res.status(401).json({
           status: 'error',
-          message: 'Your account has been deactivated. Please contact support.'
+          message: 'User account has been deactivated'
         });
       }
 
       next();
-    } catch (error) {
+    } catch (err) {
       return res.status(401).json({
         status: 'error',
-        message: 'Token is invalid or has expired'
+        message: 'Not authorized, token failed'
       });
     }
   } catch (error) {
-    return res.status(500).json({
-      status: 'error',
-      message: 'Server error'
-    });
+    next(error);
   }
 };
 
@@ -62,14 +59,14 @@ exports.authorize = (...roles) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         status: 'error',
-        message: `User role '${req.user.role}' is not authorized to access this route`
+        message: `User role ${req.user.role} is not authorized to access this route`
       });
     }
     next();
   };
 };
 
-// Optional authentication (for routes that work with or without auth)
+// Optional authentication - don't fail if no token
 exports.optionalAuth = async (req, res, next) => {
   try {
     let token;
@@ -82,7 +79,7 @@ exports.optionalAuth = async (req, res, next) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = await User.findById(decoded.id).select('-password');
-      } catch (error) {
+      } catch (err) {
         // Token invalid, but that's okay for optional auth
         req.user = null;
       }
@@ -90,6 +87,6 @@ exports.optionalAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    next();
+    next(error);
   }
 };

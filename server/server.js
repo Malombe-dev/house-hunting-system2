@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -9,7 +8,10 @@ require('dotenv').config();
 
 const app = express();
 
-// Import routes
+// 🧩 Import DB connection
+const connectDB = require('./src/config/database');
+
+// 🧩 Import routes
 const authRoutes = require('./src/routes/auth');
 const userRoutes = require('./src/routes/users');
 const propertyRoutes = require('./src/routes/properties');
@@ -19,7 +21,7 @@ const maintenanceRoutes = require('./src/routes/maintenance');
 const reviewRoutes = require('./src/routes/reviews');
 const analyticsRoutes = require('./src/routes/analytics');
 
-// Import middleware
+// 🧩 Import middleware
 const errorHandler = require('./src/middleware/errorHandler');
 
 // Security middleware
@@ -27,37 +29,25 @@ app.use(helmet());
 app.use(mongoSanitize());
 app.use(compression());
 
-// CORS configuration
+// CORS
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
-  optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
 
-// Body parser middleware
+// Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100
+  windowMs: 15 * 60 * 1000,
+  max: 100,
 });
 app.use('/api/', limiter);
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ MongoDB Connected'))
-.catch((err) => {
-  console.error('❌ MongoDB Connection Error:', err);
-  process.exit(1);
-});
-
-// API Routes
+// ✅ Use routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
@@ -67,7 +57,7 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-// Health check route
+// Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'success',
@@ -84,21 +74,13 @@ app.use('*', (req, res) => {
   });
 });
 
-// Error handling middleware (must be last)
+// Global error handler
 app.use(errorHandler);
 
-// Start server
+// ✅ Connect to DB and then start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
 });
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
-  // Close server & exit process
-  process.exit(1);
-});
-
-module.exports = app;

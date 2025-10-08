@@ -2,9 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const maintenanceController = require('../controllers/maintenanceController');
-const { authenticateToken } = require('../middleware/auth');
+const {protect: authenticateToken } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/roleAuth');
-const upload = require('../middleware/upload');
+const { uploadMultiple } = require('../middleware/upload');
+
 
 // @route   GET /api/maintenance
 // @desc    Get all maintenance requests
@@ -24,7 +25,7 @@ router.get('/:id', authenticateToken, maintenanceController.getRequestById);
 // @route   POST /api/maintenance
 // @desc    Create maintenance request
 // @access  Private
-router.post('/', authenticateToken, upload.array('images', 5), maintenanceController.createRequest);
+router.post('/', authenticateToken, uploadMultiple('images', 5), maintenanceController.createRequest);
 
 // @route   PUT /api/maintenance/:id
 // @desc    Update maintenance request
@@ -39,7 +40,7 @@ router.put('/:id/assign', authenticateToken, authorizeRoles('agent', 'admin'), m
 // @route   PUT /api/maintenance/:id/complete
 // @desc    Complete maintenance request
 // @access  Private/Agent/Admin
-router.put('/:id/complete', authenticateToken, authorizeRoles('agent', 'admin'), upload.array('completionImages', 5), maintenanceController.completeRequest);
+router.put('/:id/complete', authenticateToken, authorizeRoles('agent', 'admin'), uploadMultiple('completionImages', 5), maintenanceController.completeRequest);
 
 // @route   DELETE /api/maintenance/:id
 // @desc    Delete maintenance request

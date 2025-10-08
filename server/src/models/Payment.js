@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const paymentSchema = new mongoose.Schema({
   tenant: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
+    ref: 'User',
     required: true
   },
   property: {
@@ -16,14 +16,19 @@ const paymentSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  lease: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Lease',
+    required: true
+  },
   amount: {
     type: Number,
-    required: [true, 'Payment amount is required'],
-    min: [0, 'Amount cannot be negative']
+    required: true,
+    min: 0
   },
   paymentType: {
     type: String,
-    enum: ['rent', 'deposit', 'utility', 'maintenance', 'late_fee', 'other'],
+    enum: ['rent', 'deposit', 'late_fee', 'utility', 'maintenance', 'other'],
     default: 'rent'
   },
   paymentMethod: {
@@ -33,19 +38,8 @@ const paymentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['paid', 'pending', 'overdue', 'failed', 'refunded'],
+    enum: ['pending', 'paid', 'overdue', 'failed', 'refunded', 'cancelled'],
     default: 'pending'
-  },
-  // Payment period
-  paymentFor: {
-    month: {
-      type: Number,
-      min: 1,
-      max: 12
-    },
-    year: {
-      type: Number
-    }
   },
   dueDate: {
     type: Date,
@@ -55,53 +49,30 @@ const paymentSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  // Transaction details
+  paymentPeriod: {
+    month: Number,
+    year: Number
+  },
   transactionId: {
-    type: String,
-    default: null
-  },
-  reference: {
-    type: String,
-    default: null
-  },
-  // Late payment
-  lateFee: {
-    type: Number,
-    default: 0,
-    min: [0, 'Late fee cannot be negative']
-  },
-  daysOverdue: {
-    type: Number,
-    default: 0,
-    min: [0, 'Days overdue cannot be negative']
-  },
-  // Receipt
-  receiptNumber: {
     type: String,
     unique: true,
     sparse: true
   },
-  receiptUrl: {
-    type: String,
-    default: null
-  },
-  // Notes
-  notes: {
-    type: String,
-    default: null
-  },
-  // Refund details (if applicable)
-  refundAmount: {
+  reference: String,
+  lateFee: {
     type: Number,
     default: 0
   },
-  refundDate: {
-    type: Date,
-    default: null
+  discount: {
+    type: Number,
+    default: 0
   },
-  refundReason: {
-    type: String,
-    default: null
+  notes: String,
+  receiptUrl: String,
+  // For online payments
+  paymentGatewayResponse: {
+    type: mongoose.Schema.Types.Mixed,
+    select: false
   }
 }, {
   timestamps: true
@@ -113,56 +84,34 @@ paymentSchema.index({ property: 1 });
 paymentSchema.index({ agent: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ dueDate: 1 });
-paymentSchema.index({ paidDate: 1 });
-paymentSchema.index({ receiptNumber: 1 });
-paymentSchema.index({ createdAt: -1 });
-paymentSchema.index({ 'paymentFor.month': 1, 'paymentFor.year': 1 });
+paymentSchema.index({ paidDate: -1 });
+paymentSchema.index({ transactionId: 1 });
 
-// Generate receipt number before saving
-paymentSchema.pre('save', async function(next) {
-  if (this.isNew && this.status === 'paid' && !this.receiptNumber) {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    const count = await mongoose.model('Payment').countDocuments({ 
-      receiptNumber: { $regex: `^RCP-${year}${month}` } 
-    });
-    this.receiptNumber = `RCP-${year}${month}${String(count + 1).padStart(4, '0')}`;
-  }
-  next();
+// Virtual for total amount including fees
+paymentSchema.virtual('totalAmount').get(function() {
+  return this.amount + this.lateFee - this.discount;
 });
 
-// Virtual for checking if payment is overdue
-paymentSchema.virtual('isOverdue').get(function() {
-  if (this.status === 'paid') return false;
-  return new Date() > this.dueDate;
-});
-
-// Method to calculate days overdue
-paymentSchema.methods.calculateDaysOverdue = function() {
-  if (this.status === 'paid' || !this.isOverdue) return 0;
-  const today = new Date();
-  const diffTime = Math.abs(today - this.dueDate);
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+// Check if payment is overdue
+paymentSchema.methods.isOverdue = function() {
+  return new Date() > this.dueDate && this.status === 'pending';
 };
 
-// Method to mark as paid
-paymentSchema.methods.markAsPaid = async function(paymentDetails) {
+// Mark as paid
+paymentSchema.methods.markAsPaid = function(transactionId) {
   this.status = 'paid';
   this.paidDate = new Date();
-  this.transactionId = paymentDetails.transactionId;
-  this.paymentMethod = paymentDetails.paymentMethod;
-  this.reference = paymentDetails.reference;
-  this.daysOverdue = this.calculateDaysOverdue();
-  
+  this.transactionId = transactionId;
   return this.save();
 };
 
-// Method to calculate late fee
-paymentSchema.methods.calculateLateFee = function(ratePerDay = 50) {
-  if (!this.isOverdue) return 0;
-  const daysOverdue = this.calculateDaysOverdue();
-  return daysOverdue * ratePerDay;
-};
+// Auto-update status if overdue
+paymentSchema.pre('save', function(next) {
+  if (this.isOverdue()) {
+    this.status = 'overdue';
+  }
+  next();
+});
 
 const Payment = mongoose.model('Payment', paymentSchema);
 

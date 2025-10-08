@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const { authenticateToken } = require('../middleware/auth');
+const {protect: authenticateToken } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/roleAuth');
 
 // @route   GET /api/users/profile
@@ -44,5 +44,9 @@ router.put('/:id/role', authenticateToken, authorizeRoles('admin'), userControll
 // @desc    Delete user (Admin only)
 // @access  Private/Admin
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), userController.deleteUser);
+
+router.post('/verify-email', userController.verifyEmail);
+
+router.post('/resend-verification', authenticateToken, userController.resendVerification);
 
 module.exports = router;

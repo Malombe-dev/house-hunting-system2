@@ -4,42 +4,45 @@
     "description": "Comprehensive House Hunting & Property Management System",
     "private": true,
     "workspaces": [
-      "client",
-      "server"
+        "client",
+        "server"
     ],
     "scripts": {
-      "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
-      "build": "npm run client:build && npm run server:build",
-      "start": "npm run server:start",
-      "client:dev": "cd client && npm start",
-      "client:build": "cd client && npm run build",
-      "server:dev": "cd server && npm run dev",
-      "server:start": "cd server && npm start",
-      "server:build": "cd server && npm run build",
-      "install:all": "npm install && cd client && npm install && cd ../server && npm install",
-      "clean": "rm -rf node_modules client/node_modules server/node_modules",
-      "test": "npm run client:test && npm run server:test",
-      "client:test": "cd client && npm test",
-      "server:test": "cd server && npm test"
+        "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+        "build": "npm run client:build && npm run server:build",
+        "start": "npm run server:start",
+        "client:dev": "cd client && npm start",
+        "client:build": "cd client && npm run build",
+        "server:dev": "cd server && npm run dev",
+        "server:start": "cd server && npm start",
+        "server:build": "cd server && npm run build",
+        "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+        "clean": "rm -rf node_modules client/node_modules server/node_modules",
+        "test": "npm run client:test && npm run server:test",
+        "client:test": "cd client && npm test",
+        "server:test": "cd server && npm test"
     },
     "devDependencies": {
-      "concurrently": "^8.2.2"
+        "concurrently": "^8.2.2"
     },
     "engines": {
-      "node": ">=16.0.0",
-      "npm": ">=8.0.0"
+        "node": ">=16.0.0",
+        "npm": ">=8.0.0"
     },
     "repository": {
-      "type": "git",
-      "url": "your-repo-url"
+        "type": "git",
+        "url": "your-repo-url"
     },
     "keywords": [
-      "property-management",
-      "house-hunting",
-      "rental-system",
-      "mern-stack",
-      "real-estate"
+        "property-management",
+        "house-hunting",
+        "rental-system",
+        "mern-stack",
+        "real-estate"
     ],
     "author": "Your Name",
-    "license": "MIT"
-  }
+    "license": "MIT",
+    "dependencies": {
+        "nodemailer": "^7.0.9"
+    }
+}

@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }) => {
     
     try {
       const response = await authService.login(credentials);
-      const { user, token } = response;
+      const { user, token } = response.data;
       
       localStorage.setItem('token', token);
       
@@ -141,7 +141,7 @@ export const AuthProvider = ({ children }) => {
     
     try {
       const response = await authService.register(userData);
-      const { user, token } = response;
+      const { user, token } = response.data;
       
       localStorage.setItem('token', token);
       

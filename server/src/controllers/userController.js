@@ -1,6 +1,8 @@
 // server/src/controllers/userController.js
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { sendVerificationEmail } = require('../utils/email'); 
 
 // Get user profile
 exports.getProfile = async (req, res) => {
@@ -217,6 +219,77 @@ exports.updateUserRole = async (req, res) => {
     });
   } catch (error) {
     console.error('Update user role error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Verify email
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: 'Verification token required' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.verified) {
+      return res.status(400).json({ message: 'Email already verified' });
+    }
+
+    user.verified = true;
+    user.verificationToken = undefined;
+    await user.save();
+
+    res.json({ message: 'Email verified successfully' });
+  } catch (error) {
+    console.error('Verify email error:', error);
+    res.status(400).json({ message: 'Invalid or expired token' });
+  }
+};
+
+
+
+
+exports.resendVerification = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.verified) {
+      return res.status(400).json({ message: 'Email already verified' });
+    }
+
+    // Check 2-min cooldown (120,000 ms)
+    const now = Date.now();
+    if (user.lastVerificationSentAt && now - user.lastVerificationSentAt.getTime() < 120000) {
+      const remaining = Math.ceil((120000 - (now - user.lastVerificationSentAt.getTime())) / 1000);
+      return res.status(429).json({ message: `Please wait ${remaining}s before resending.` });
+    }
+
+    // Create new token
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+
+    // Send email
+    await sendVerificationEmail(user.email, verifyUrl);
+
+    user.verificationToken = token;
+    user.lastVerificationSentAt = new Date();
+    await user.save();
+
+    res.json({ message: 'Verification email resent successfully' });
+  } catch (error) {
+    console.error('Resend verification error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

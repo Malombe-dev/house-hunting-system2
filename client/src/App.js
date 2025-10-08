@@ -5,6 +5,9 @@ import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import './App.css';
 
+// forms 
+import PropertyForm from './components/forms/PropertyForm';
+
 // Layout Components
 import PublicLayout from './layouts/PublicLayout';
 import AdminLayout from './layouts/AdminLayout';
@@ -15,6 +18,10 @@ import TenantLayout from './layouts/TenantLayout';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
+import VerifyEmail from './pages/auth/VerifyEmail';
+
+
+
 
 // Public Pages
 import Home from './pages/public/Home';
@@ -56,6 +63,7 @@ function App() {
   return (
     <AuthProvider>
       <NotificationProvider>
+        
         <div className="App">
           <Routes>
             {/* Public Routes */}
@@ -69,6 +77,8 @@ function App() {
             <Route path="/auth/login" element={<Login />} />
             <Route path="/auth/register" element={<Register />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
+
 
             {/* Admin Routes */}
             <Route
@@ -107,6 +117,8 @@ function App() {
               <Route path="analytics" element={<AgentAnalytics />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="properties/new" element={<PropertyForm />} />
+
             </Route>
 
             {/* Tenant Routes */}

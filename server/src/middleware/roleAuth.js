@@ -1,38 +1,28 @@
-// Check if user owns the resource
-exports.checkOwnership = (model) => {
+// Check if user owns the resource or is admin
+exports.checkOwnership = (Model, resourceParam = 'id', ownerField = 'user') => {
     return async (req, res, next) => {
       try {
-        const resourceId = req.params.id;
-        const Resource = require(`../models/${model}`);
-        
-        const resource = await Resource.findById(resourceId);
-        
+        const resourceId = req.params[resourceParam];
+        const resource = await Model.findById(resourceId);
+  
         if (!resource) {
           return res.status(404).json({
             status: 'error',
-            message: `${model} not found`
+            message: 'Resource not found'
           });
         }
   
-        // Admin can access anything
+        // Admin can access everything
         if (req.user.role === 'admin') {
+          req.resource = resource;
           return next();
         }
   
-        // Check ownership based on model
-        let isOwner = false;
-        
-        if (model === 'Property') {
-          isOwner = resource.agent.toString() === req.user._id.toString();
-        } else if (model === 'Tenant') {
-          isOwner = resource.user.toString() === req.user._id.toString() || 
-                    resource.agent.toString() === req.user._id.toString();
-        } else if (model === 'Payment' || model === 'Maintenance') {
-          isOwner = resource.tenant.toString() === req.user._id.toString() || 
-                    resource.agent.toString() === req.user._id.toString();
-        }
+        // Check if user owns the resource
+        const ownerId = resource[ownerField]?.toString() || resource[ownerField];
+        const userId = req.user._id.toString();
   
-        if (!isOwner) {
+        if (ownerId !== userId) {
           return res.status(403).json({
             status: 'error',
             message: 'Not authorized to access this resource'
@@ -42,23 +32,18 @@ exports.checkOwnership = (model) => {
         req.resource = resource;
         next();
       } catch (error) {
-        return res.status(500).json({
-          status: 'error',
-          message: 'Server error',
-          error: error.message
-        });
+        next(error);
       }
     };
   };
   
-  // Check if user is agent/landlord managing property
-  exports.isPropertyManager = async (req, res, next) => {
+  // Check if user is agent/landlord of property
+  exports.checkPropertyOwnership = async (req, res, next) => {
     try {
-      const propertyId = req.params.propertyId || req.body.property;
       const Property = require('../models/Property');
-      
+      const propertyId = req.params.id || req.params.propertyId;
       const property = await Property.findById(propertyId);
-      
+  
       if (!property) {
         return res.status(404).json({
           status: 'error',
@@ -66,13 +51,13 @@ exports.checkOwnership = (model) => {
         });
       }
   
-      // Admin can manage any property
+      // Admin can access everything
       if (req.user.role === 'admin') {
         req.property = property;
         return next();
       }
   
-      // Check if user is the property agent
+      // Check if user is the agent/landlord of the property
       if (property.agent.toString() !== req.user._id.toString()) {
         return res.status(403).json({
           status: 'error',
@@ -83,40 +68,45 @@ exports.checkOwnership = (model) => {
       req.property = property;
       next();
     } catch (error) {
-      return res.status(500).json({
-        status: 'error',
-        message: 'Server error',
-        error: error.message
-      });
+      next(error);
     }
   };
   
   // Check if user is tenant of property
-  exports.isTenantOfProperty = async (req, res, next) => {
+  exports.checkTenantAccess = async (req, res, next) => {
     try {
-      const propertyId = req.params.propertyId || req.body.property;
       const Tenant = require('../models/Tenant');
-      
+      const propertyId = req.params.propertyId || req.body.property;
+  
       const tenant = await Tenant.findOne({
-        user: req.user._id,
         property: propertyId,
+        user: req.user._id,
         status: 'active'
       });
-      
-      if (!tenant) {
+  
+      if (!tenant && req.user.role !== 'admin') {
         return res.status(403).json({
           status: 'error',
-          message: 'You are not a tenant of this property'
+          message: 'Not authorized to access this property'
         });
       }
   
       req.tenant = tenant;
       next();
     } catch (error) {
-      return res.status(500).json({
-        status: 'error',
-        message: 'Server error',
-        error: error.message
-      });
+      next(error);
     }
   };
+
+  // Check if user has specific roles
+exports.authorizeRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        status: 'error',
+        message: `Access denied. Only the following roles are allowed: ${allowedRoles.join(', ')}`
+      });
+    }
+    next();
+  };
+};
