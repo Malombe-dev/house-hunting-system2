@@ -7,6 +7,9 @@ import './App.css';
 
 // forms 
 import PropertyForm from './components/forms/PropertyForm';
+import CreateAgentForm from './components/forms/CreateAgentForm';
+import CreateEmployeeForm from './components/forms/CreateEmployeeForm';
+import CreateTenantForm from './components/forms/CreateTenantForm';
 
 // Layout Components
 import PublicLayout from './layouts/PublicLayout';
@@ -71,6 +74,10 @@ function App() {
               <Route index element={<Home />} />
               <Route path="properties" element={<PropertySearch />} />
               <Route path="properties/:id" element={<PropertyDetails />} />
+
+              <Route path="create-agent" element={<CreateAgentForm />} />
+              <Route path="create-employee" element={<CreateEmployeeForm />} />
+              <Route path="create-tenant" element={<CreateTenantForm />} />
             </Route>
 
             {/* Auth Routes */}
@@ -89,6 +96,7 @@ function App() {
                 </ProtectedRoute>
               }
             >
+
               <Route index element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<UserManagement />} />

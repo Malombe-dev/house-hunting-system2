@@ -1,3 +1,4 @@
+// server/src/models/User.js (UPDATED WITH HIERARCHY)
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -32,11 +33,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Password is required'],
     minlength: [8, 'Password must be at least 8 characters'],
-    select: false // Don't return password by default
+    select: false
   },
   role: {
     type: String,
-    enum: ['admin', 'agent', 'landlord', 'tenant', 'seeker'],
+    enum: ['admin', 'agent', 'landlord', 'employee', 'tenant', 'seeker'],
     default: 'seeker'
   },
   avatar: {
@@ -50,7 +51,6 @@ const userSchema = new mongoose.Schema({
   verificationToken: String,
   verificationTokenExpires: Date,
   resetPasswordToken: String,
-  lastVerificationSentAt: Date,
   resetPasswordExpires: Date,
   isActive: {
     type: Boolean,
@@ -60,6 +60,38 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  
+  // HIERARCHY FIELDS
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  parentUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  mustChangePassword: {
+    type: Boolean,
+    default: false
+  },
+  
+  // For Agents/Landlords
+  businessName: String,
+  businessLicense: String,
+  
+  // For Employees
+  jobTitle: String,
+  branch: String,
+  employeeId: String,
+  permissions: {
+    canCreateTenants: { type: Boolean, default: false },
+    canViewReports: { type: Boolean, default: false },
+    canManageProperties: { type: Boolean, default: false },
+    canHandlePayments: { type: Boolean, default: false }
+  },
+  
   // Additional profile fields
   address: {
     street: String,
@@ -70,10 +102,14 @@ const userSchema = new mongoose.Schema({
   },
   idNumber: String,
   dateOfBirth: Date,
-  // For agents/landlords
-  businessName: String,
-  businessLicense: String,
+  
   // For tenants
+  occupation: String,
+  employer: {
+    name: String,
+    phone: String,
+    address: String
+  },
   emergencyContact: {
     name: String,
     phone: String,
@@ -86,6 +122,8 @@ const userSchema = new mongoose.Schema({
 // Index for faster queries
 userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ parentUser: 1 });
+userSchema.index({ createdBy: 1 });
 userSchema.index({ createdAt: -1 });
 
 // Hash password before saving
@@ -125,9 +163,29 @@ userSchema.methods.generateAuthToken = function() {
 userSchema.methods.generateRefreshToken = function() {
   return jwt.sign(
     { id: this._id },
-    process.env.JWT_REFRESH_SECRET,
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_REFRESH_EXPIRE || '7d' }
   );
+};
+
+// Check if user has permission
+userSchema.methods.hasPermission = function(permission) {
+  if (this.role === 'admin') return true;
+  if (this.role === 'agent' || this.role === 'landlord') return true;
+  if (this.role === 'employee') {
+    return this.permissions && this.permissions[permission];
+  }
+  return false;
+};
+
+// Get user hierarchy level
+userSchema.methods.getHierarchyLevel = function() {
+  if (this.role === 'admin') return 1;
+  if (this.role === 'agent' || this.role === 'landlord') return 2;
+  if (this.role === 'employee') return 3;
+  if (this.role === 'tenant') return 4;
+  if (this.role === 'seeker') return 5;
+  return 6;
 };
 
 // Get user without sensitive data
