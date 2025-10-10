@@ -20,6 +20,7 @@ const paymentRoutes = require('./src/routes/payments');
 const maintenanceRoutes = require('./src/routes/maintenance');
 const reviewRoutes = require('./src/routes/reviews');
 const analyticsRoutes = require('./src/routes/analytics');
+const hierarchyRoutes = require('./src/routes/hierarchy');
 
 // 🧩 Import middleware
 const errorHandler = require('./src/middleware/errorHandler');
@@ -56,6 +57,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/hierarchy', hierarchyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
