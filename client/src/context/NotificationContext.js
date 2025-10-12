@@ -179,6 +179,19 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
+ // Show notification helper
+const showNotification = (title, message) => {
+  const newNotification = {
+    _id: Date.now(),          // Temporary ID
+    title,
+    message,
+    read: false,
+    createdAt: new Date()
+  };
+  addNotification(newNotification);
+};
+
+
   // Context value
   const value = {
     notifications: state.notifications,
@@ -187,6 +200,7 @@ export const NotificationProvider = ({ children }) => {
     error: state.error,
     fetchNotifications,
     addNotification,
+    showNotification,
     markAsRead,
     markAllAsRead,
     deleteNotification,

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -5,7 +7,8 @@ import { useAuth } from '../../context/AuthContext';
 import { EyeIcon, EyeSlashIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline';
 import { ButtonLoader } from '../../components/common/LoadingSpinner';
 import toast from 'react-hot-toast';
-
+import Footer from '../../components/common/Footer';
+import Header from '../../components/common/Header';
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,14 +37,40 @@ const Login = () => {
     
     try {
       const result = await login(data);
+      console.log('Login result:', result); // Debug
+      // In your login form, check what's being sent
+      console.log('📤 Sending login data:', data);
+      
+
       
       if (result.success) {
-        // Navigate based on user role
+        // AuthContext already extracts requiresPasswordChange, tempToken, and user
+        // Check if password change is required
+        if (result.requiresPasswordChange) {
+          console.log('Password change required, redirecting...');
+          console.log('Temp token:', result.tempToken);
+          console.log('User:', result.user);
+          
+          // Redirect to password change page with temp token
+          navigate('/auth/first-login-change-password', { 
+            state: { 
+              user: result.user,
+              tempToken: result.tempToken,
+              from: from 
+            },
+            replace: true
+          });
+          return;
+        }
+        
+        // Regular login - navigate based on role
+        toast.success(`Welcome back, ${result.user.firstName}!`);
         const redirectPath = getRoleBasedRedirect(result.user.role);
         navigate(redirectPath, { replace: true });
       }
     } catch (error) {
       console.error('Login error:', error);
+      toast.error(error.message || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
@@ -53,6 +82,7 @@ const Login = () => {
         return '/admin/dashboard';
       case 'agent':
       case 'landlord':
+      case 'employee':
         return '/agent/dashboard';
       case 'tenant':
         return '/tenant/dashboard';
@@ -65,8 +95,11 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50">
+        <Header />
       <div className="flex min-h-screen">
         {/* Left Section - Form */}
+      
+
         <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
           <div className="max-w-md w-full space-y-8">
             {/* Header */}
@@ -196,6 +229,18 @@ const Login = () => {
                 </Link>
               </div>
             </form>
+
+            {/* Demo Credentials Info */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs font-medium text-blue-900 mb-2">Test Credentials:</p>
+              <div className="text-xs text-blue-800 space-y-1">
+                <p><strong>Email:</strong> test@gmail.com</p>
+                <p><strong>Password:</strong> Use the temporary password provided</p>
+                <p className="text-blue-600 mt-2">
+                  💡 First-time login will prompt password change
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -224,8 +269,10 @@ const Login = () => {
               ))}
             </div>
           </div>
+
         </div>
       </div>
+      <Footer />
     </div>
   );
 };

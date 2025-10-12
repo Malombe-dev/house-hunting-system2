@@ -22,6 +22,7 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
+import FirstLoginChangePassword from './pages/auth/FirstLoginPasswordChange';
 
 
 
@@ -74,6 +75,7 @@ function App() {
               <Route index element={<Home />} />
               <Route path="properties" element={<PropertySearch />} />
               <Route path="properties/:id" element={<PropertyDetails />} />
+              <Route path="auth/first-login-change-password" element={<FirstLoginChangePassword />} />
 
               <Route path="create-agent" element={<CreateAgentForm />} />
               <Route path="create-employee" element={<CreateEmployeeForm />} />

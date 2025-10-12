@@ -1,7 +1,11 @@
+// client/src/pages/agent/AgentDashboard.jsx (UPDATED WITH EMPLOYEES)
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import Modal from '../../components/common/Modal';
+import CreateEmployeeForm from '../../components/forms/CreateEmployeeForm';
+import api from '../../services/api';
 
 import { 
   HomeIcon,
@@ -12,42 +16,65 @@ import {
   ArrowTrendingDownIcon,
   PlusIcon,
   EyeIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  BriefcaseIcon,
+  UsersIcon
 } from '@heroicons/react/24/outline';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const AgentDashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showCreateEmployeeModal, setShowCreateEmployeeModal] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [showEmployeesModal, setShowEmployeesModal] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        setStats({
-          totalProperties: 24,
-          activeTenants: 18,
-          monthlyIncome: 1250000,
-          maintenanceRequests: 7,
-          propertyGrowth: 15.2,
-          tenantGrowth: 8.5,
-          incomeGrowth: 22.1,
-          maintenanceIncrease: -12.3,
-          occupancyRate: 85.5,
-          averageRent: 52000
-        });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStats();
+    fetchDashboardData();
   }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch agent's hierarchy and stats
+      const [hierarchyRes, employeesRes] = await Promise.all([
+        api.get(`/hierarchy/agent/${user.id}`),
+        api.get('/users/my-employees')
+      ]);
+
+      setStats({
+        totalProperties: hierarchyRes.data.stats.totalProperties,
+        activeTenants: hierarchyRes.data.stats.totalTenants,
+        totalEmployees: hierarchyRes.data.employees.length,
+        monthlyIncome: 1250000, // From payments
+        maintenanceRequests: 7,
+        propertyGrowth: 15.2,
+        tenantGrowth: 8.5,
+        incomeGrowth: 22.1,
+        maintenanceIncrease: -12.3,
+        occupancyRate: hierarchyRes.data.stats.occupancyRate || 85,
+        averageRent: 52000
+      });
+
+      setEmployees(employeesRes.data.employees || []);
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmployeeCreated = (newEmployee) => {
+    setEmployees(prev => [newEmployee, ...prev]);
+    setStats(prev => ({
+      ...prev,
+      totalEmployees: (prev.totalEmployees || 0) + 1
+    }));
+    setShowCreateEmployeeModal(false);
+  };
 
   // Mock data for charts
   const incomeData = [
@@ -87,11 +114,13 @@ const AgentDashboard = () => {
     },
     {
       id: 3,
-      type: 'tenant_application',
-      applicant: 'Mike Wilson',
+      type: 'employee_action',
+      employee: 'Mary Johnson',
+      action: 'created new tenant',
+      tenant: 'Mike Wilson',
       property: 'Kilimani Studio 3A',
       time: '1 day ago',
-      status: 'pending'
+      status: 'completed'
     },
     {
       id: 4,
@@ -102,32 +131,6 @@ const AgentDashboard = () => {
       days: 3,
       time: '2 days ago',
       status: 'overdue'
-    }
-  ];
-
-  const upcomingTasks = [
-    {
-      id: 1,
-      type: 'lease_renewal',
-      tenant: 'Robert Brown',
-      property: 'Runda House 2',
-      dueDate: '2024-02-15',
-      priority: 'high'
-    },
-    {
-      id: 2,
-      type: 'property_inspection',
-      property: 'Westlands Apartment 4A',
-      dueDate: '2024-02-10',
-      priority: 'medium'
-    },
-    {
-      id: 3,
-      type: 'maintenance_follow_up',
-      property: 'Karen House 3',
-      issue: 'AC repair',
-      dueDate: '2024-02-08',
-      priority: 'high'
     }
   ];
 
@@ -150,9 +153,19 @@ const AgentDashboard = () => {
           <p className="text-gray-600 mt-1">
             Here's what's happening with your properties today.
           </p>
+          <p className="text-sm text-gray-500 mt-1">
+            Account ID: {user?.id?.slice(-8).toUpperCase()}
+          </p>
         </div>
         
         <div className="flex space-x-3">
+          <button 
+            onClick={() => setShowCreateEmployeeModal(true)}
+            className="btn-secondary"
+          >
+            <UsersIcon className="h-4 w-4 mr-2" />
+            Add Employee
+          </button>
           <Link to="/agent/properties/new" className="btn-primary">
             <PlusIcon className="h-4 w-4 mr-2" />
             Add Property
@@ -161,14 +174,14 @@ const AgentDashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         {/* Total Properties */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Properties</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.totalProperties}
+                {stats?.totalProperties || 0}
               </p>
             </div>
             <div className="p-3 bg-blue-100 rounded-full">
@@ -180,7 +193,27 @@ const AgentDashboard = () => {
             <span className="text-sm text-green-600 font-medium">
               +{stats?.propertyGrowth}%
             </span>
-            <span className="text-sm text-gray-500 ml-2">vs last month</span>
+          </div>
+        </div>
+
+        {/* Team Members */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+             onClick={() => setShowEmployeesModal(true)}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Team Members</p>
+              <p className="text-3xl font-bold text-gray-900">
+                {stats?.totalEmployees || 0}
+              </p>
+            </div>
+            <div className="p-3 bg-cyan-100 rounded-full">
+              <BriefcaseIcon className="h-6 w-6 text-cyan-600" />
+            </div>
+          </div>
+          <div className="flex items-center mt-4">
+            <span className="text-sm text-cyan-600 font-medium">
+              View team →
+            </span>
           </div>
         </div>
 
@@ -190,7 +223,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Active Tenants</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.activeTenants}
+                {stats?.activeTenants || 0}
               </p>
             </div>
             <div className="p-3 bg-green-100 rounded-full">
@@ -198,11 +231,9 @@ const AgentDashboard = () => {
             </div>
           </div>
           <div className="flex items-center mt-4">
-            <ArrowTrendingUpIcon className="h-4 w-4 text-green-500 mr-1" />
-            <span className="text-sm text-green-600 font-medium">
-              +{stats?.tenantGrowth}%
+            <span className="text-sm text-gray-500">
+              {stats?.occupancyRate}% occupied
             </span>
-            <span className="text-sm text-gray-500 ml-2">occupancy rate: {stats?.occupancyRate}%</span>
           </div>
         </div>
 
@@ -212,7 +243,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Monthly Income</p>
               <p className="text-3xl font-bold text-gray-900">
-                KES {(stats?.monthlyIncome / 1000000).toFixed(1)}M
+                KES {((stats?.monthlyIncome || 0) / 1000000).toFixed(1)}M
               </p>
             </div>
             <div className="p-3 bg-purple-100 rounded-full">
@@ -224,7 +255,6 @@ const AgentDashboard = () => {
             <span className="text-sm text-green-600 font-medium">
               +{stats?.incomeGrowth}%
             </span>
-            <span className="text-sm text-gray-500 ml-2">avg: KES {(stats?.averageRent / 1000).toFixed(0)}K</span>
           </div>
         </div>
 
@@ -232,9 +262,9 @@ const AgentDashboard = () => {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Maintenance Requests</p>
+              <p className="text-sm font-medium text-gray-600">Maintenance</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.maintenanceRequests}
+                {stats?.maintenanceRequests || 0}
               </p>
             </div>
             <div className="p-3 bg-yellow-100 rounded-full">
@@ -242,11 +272,9 @@ const AgentDashboard = () => {
             </div>
           </div>
           <div className="flex items-center mt-4">
-            <ArrowTrendingDownIcon className="h-4 w-4 text-green-500 mr-1" />
-            <span className="text-sm text-green-600 font-medium">
-              {Math.abs(stats?.maintenanceIncrease)}% less
+            <span className="text-sm text-gray-500">
+              Pending requests
             </span>
-            <span className="text-sm text-gray-500 ml-2">vs last month</span>
           </div>
         </div>
       </div>
@@ -346,111 +374,137 @@ const AgentDashboard = () => {
         </div>
       </div>
 
-      {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Recent Activity */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
-            <Link 
-              to="/agent/activity" 
-              className="text-sm text-secondary-600 hover:text-secondary-800 font-medium"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="space-y-4">
-            {recentActivities.map((activity) => (
-              <div key={activity.id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50">
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  activity.type === 'payment_received' ? 'bg-green-100' :
-                  activity.type === 'maintenance_request' ? 'bg-yellow-100' :
-                  activity.type === 'tenant_application' ? 'bg-blue-100' :
-                  'bg-red-100'
-                }`}>
-                  {activity.type === 'payment_received' && 
-                    <CurrencyDollarIcon className="h-4 w-4 text-green-600" />}
-                  {activity.type === 'maintenance_request' && 
-                    <WrenchScrewdriverIcon className="h-4 w-4 text-yellow-600" />}
-                  {activity.type === 'tenant_application' && 
-                    <UserGroupIcon className="h-4 w-4 text-blue-600" />}
-                  {activity.type === 'payment_overdue' && 
-                    <ExclamationCircleIcon className="h-4 w-4 text-red-600" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900">
-                    {activity.type === 'payment_received' && (
-                      <>
-                        <span className="font-medium">{activity.tenant}</span> paid 
-                        rent for <span className="font-medium">{activity.property}</span>
-                      </>
-                    )}
-                    {activity.type === 'maintenance_request' && (
-                      <>
-                        <span className="font-medium">{activity.tenant}</span> reported 
-                        {activity.issue} at <span className="font-medium">{activity.property}</span>
-                      </>
-                    )}
-                    {activity.type === 'tenant_application' && (
-                      <>
-                        <span className="font-medium">{activity.applicant}</span> applied 
-                        for <span className="font-medium">{activity.property}</span>
-                      </>
-                    )}
-                    {activity.type === 'payment_overdue' && (
-                      <>
-                        <span className="font-medium">{activity.tenant}</span> payment overdue 
-                        for <span className="font-medium">{activity.property}</span>
-                      </>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-500">{activity.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Bottom Row - Recent Activity */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+          <Link 
+            to="/agent/activity" 
+            className="text-sm text-secondary-600 hover:text-secondary-800 font-medium"
+          >
+            View all
+          </Link>
         </div>
-
-        {/* Upcoming Tasks */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Upcoming Tasks</h3>
-            <Link 
-              to="/agent/tasks" 
-              className="text-sm text-secondary-600 hover:text-secondary-800 font-medium"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="space-y-4">
-            {upcomingTasks.map((task) => (
-              <div key={task.id} className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200">
-                <div className={`flex-shrink-0 w-3 h-3 rounded-full ${
-                  task.priority === 'high' ? 'bg-red-500' :
-                  task.priority === 'medium' ? 'bg-yellow-500' :
-                  'bg-green-500'
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    {task.type === 'lease_renewal' && `Lease renewal - ${task.tenant}`}
-                    {task.type === 'property_inspection' && `Property inspection`}
-                    {task.type === 'maintenance_follow_up' && `Follow up: ${task.issue}`}
-                  </p>
-                  <p className="text-xs text-gray-600">{task.property}</p>
-                  <p className="text-xs text-gray-500">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
-                </div>
-                <div className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                  task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-green-100 text-green-800'
-                }`}>
-                  {task.priority}
-                </div>
+        <div className="space-y-4">
+          {recentActivities.map((activity) => (
+            <div key={activity.id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50">
+              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                activity.type === 'payment_received' ? 'bg-green-100' :
+                activity.type === 'maintenance_request' ? 'bg-yellow-100' :
+                activity.type === 'employee_action' ? 'bg-cyan-100' :
+                'bg-red-100'
+              }`}>
+                {activity.type === 'payment_received' && 
+                  <CurrencyDollarIcon className="h-4 w-4 text-green-600" />}
+                {activity.type === 'maintenance_request' && 
+                  <WrenchScrewdriverIcon className="h-4 w-4 text-yellow-600" />}
+                {activity.type === 'employee_action' && 
+                  <BriefcaseIcon className="h-4 w-4 text-cyan-600" />}
+                {activity.type === 'payment_overdue' && 
+                  <ExclamationCircleIcon className="h-4 w-4 text-red-600" />}
               </div>
-            ))}
-          </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-900">
+                  {activity.type === 'payment_received' && (
+                    <>
+                      <span className="font-medium">{activity.tenant}</span> paid 
+                      rent for <span className="font-medium">{activity.property}</span>
+                    </>
+                  )}
+                  {activity.type === 'maintenance_request' && (
+                    <>
+                      <span className="font-medium">{activity.tenant}</span> reported 
+                      {activity.issue} at <span className="font-medium">{activity.property}</span>
+                    </>
+                  )}
+                  {activity.type === 'employee_action' && (
+                    <>
+                      <span className="font-medium">{activity.employee}</span> {activity.action}{' '}
+                      <span className="font-medium">{activity.tenant}</span> for{' '}
+                      <span className="font-medium">{activity.property}</span>
+                    </>
+                  )}
+                  {activity.type === 'payment_overdue' && (
+                    <>
+                      <span className="font-medium">{activity.tenant}</span> payment overdue 
+                      for <span className="font-medium">{activity.property}</span>
+                    </>
+                  )}
+                </p>
+                <p className="text-xs text-gray-500">{activity.time}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* Create Employee Modal */}
+      <Modal
+        isOpen={showCreateEmployeeModal}
+        onClose={() => setShowCreateEmployeeModal(false)}
+        title="Add Team Member"
+        size="lg"
+      >
+        <CreateEmployeeForm
+          onSuccess={handleEmployeeCreated}
+          onCancel={() => setShowCreateEmployeeModal(false)}
+        />
+      </Modal>
+
+      {/* View Employees Modal */}
+      <Modal
+        isOpen={showEmployeesModal}
+        onClose={() => setShowEmployeesModal(false)}
+        title="Your Team"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {employees.length === 0 ? (
+            <div className="text-center py-12">
+              <BriefcaseIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 mb-4">No team members yet</p>
+              <button
+                onClick={() => {
+                  setShowEmployeesModal(false);
+                  setShowCreateEmployeeModal(true);
+                }}
+                className="btn-primary"
+              >
+                Add First Employee
+              </button>
+            </div>
+          ) : (
+            <>
+              {employees.map((employee) => (
+                <div key={employee._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="h-10 w-10 bg-cyan-500 rounded-full flex items-center justify-center">
+                      <span className="text-white font-medium">
+                        {employee.firstName[0]}{employee.lastName[0]}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {employee.firstName} {employee.lastName}
+                      </p>
+                      <p className="text-sm text-gray-600">{employee.jobTitle}</p>
+                      <p className="text-xs text-gray-500">{employee.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">{employee.branch || 'Main Office'}</p>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      employee.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {employee.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

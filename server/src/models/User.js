@@ -74,7 +74,7 @@ const userSchema = new mongoose.Schema({
   },
   mustChangePassword: {
     type: Boolean,
-    default: false
+    default: true
   },
   
   // For Agents/Landlords
@@ -186,6 +186,24 @@ userSchema.methods.getHierarchyLevel = function() {
   if (this.role === 'tenant') return 4;
   if (this.role === 'seeker') return 5;
   return 6;
+};
+// In your User model - add logging to comparePassword
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  try {
+    console.log('🔑 COMPARE PASSWORD METHOD =================');
+    console.log('   Candidate password:', candidatePassword);
+    console.log('   Stored hash:', this.password);
+    console.log('   Hash starts with:', this.password.substring(0, 10) + '...');
+    
+    const isMatch = await bcrypt.compare(candidatePassword, this.password);
+    console.log('   Comparison result:', isMatch);
+    console.log('========================================\n');
+    
+    return isMatch;
+  } catch (error) {
+    console.error('💥 Password comparison error:', error);
+    throw new Error('Password comparison failed');
+  }
 };
 
 // Get user without sensitive data

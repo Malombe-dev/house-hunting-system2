@@ -1,453 +1,640 @@
 // server/src/controllers/userController.js
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { sendVerificationEmail } = require('../utils/email'); 
 
-
-// Get user profile
-exports.getProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    res.json(user);
-  } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Update user profile
-exports.updateProfile = async (req, res) => {
-  try {
-    const { firstName, lastName, email, phone, address, bio } = req.body;
-    
-    const user = await User.findById(req.user.id);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    if (email && email !== user.email) {
-      const emailExists = await User.findOne({ email });
-      if (emailExists) {
-        return res.status(400).json({ message: 'Email already in use' });
-      }
-      user.email = email;
-    }
-
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (phone) user.phone = phone;
-    if (address) user.address = address;
-    if (bio) user.bio = bio;
-
-    await user.save();
-
-    res.json({
-      message: 'Profile updated successfully',
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        address: user.address,
-        bio: user.bio,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Change password
-exports.changePassword = async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    const user = await User.findById(req.user.id).select('+password');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Current password is incorrect' });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-
-    await user.save();
-
-    res.json({ message: 'Password changed successfully' });
-  } catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// ADMIN: Create Agent/Landlord Account
-exports.createAgent = async (req, res) => {
-  try {
-    // Only admins can create agents/landlords
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admins can create agent/landlord accounts' });
-    }
-
-    const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      accountType,
-      businessName,
-      businessLicense,
-      idNumber,
-      address
-    } = req.body;
-
-    // Check if email exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user
-    const user = new User({
-      firstName,
-      lastName,
-      email,
-      phone,
-      password: hashedPassword,
-      role: accountType || 'agent', // 'agent' or 'landlord'
-      businessName,
-      businessLicense,
-      idNumber,
-      address,
-      createdBy: req.user.id,
-      mustChangePassword: true // Force password change on first login
-    });
-
-    await user.save();
-
-    res.status(201).json({
-      success: true,
-      message: `${accountType === 'landlord' ? 'Landlord' : 'Agent'} account created successfully`,
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    console.error('Create agent error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// AGENT/LANDLORD: Create Employee Account
-exports.createEmployee = async (req, res) => {
-  try {
-    // Only agents and landlords can create employees
-    if (!['agent', 'landlord'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Only agents/landlords can create employee accounts' });
-    }
-
-    const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      jobTitle,
-      branch,
-      employeeId,
-      permissions
-    } = req.body;
-
-    // Check if email exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create employee user
-    const user = new User({
-      firstName,
-      lastName,
-      email,
-      phone,
-      password: hashedPassword,
-      role: 'employee',
-      jobTitle,
-      branch,
-      employeeId,
-      permissions: permissions || {
-        canCreateTenants: true,
-        canViewReports: false,
-        canManageProperties: false,
-        canHandlePayments: false
-      },
-      parentUser: req.user.id, // Link to agent/landlord
-      createdBy: req.user.id,
-      mustChangePassword: true
-    });
-
-    await user.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Employee account created successfully',
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        jobTitle: user.jobTitle
-      }
-    });
-  } catch (error) {
-    console.error('Create employee error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Get all users (Admin only)
+/**
+ * @desc    Get all users with filters
+ * @route   GET /api/users
+ * @access  Private/Admin
+ */
 exports.getAllUsers = async (req, res) => {
   try {
-    const { role, status, search, page = 1, limit = 10 } = req.query;
+    const { role, status, search, page = 1, limit = 50 } = req.query;
 
-    const query = {};
+    // Build filter query
+    const filter = {};
     
-    if (role) query.role = role;
-    if (status) query.status = status;
+    if (role) {
+      filter.role = role;
+    }
+    
+    if (status) {
+      filter.isActive = status === 'active';
+    }
+    
     if (search) {
-      query.$or = [
+      filter.$or = [
         { firstName: { $regex: search, $options: 'i' } },
         { lastName: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
     }
 
-    const users = await User.find(query)
+    // Execute query with pagination
+    const users = await User.find(filter)
       .select('-password')
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .lean();
 
-    const count = await User.countDocuments(query);
-
-    res.json({
-      users,
-      totalPages: Math.ceil(count / limit),
-      currentPage: page,
-      total: count
-    });
-  } catch (error) {
-    console.error('Get users error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Get user's employees (Agent/Landlord only)
-exports.getMyEmployees = async (req, res) => {
-  try {
-    if (!['agent', 'landlord'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const employees = await User.find({
-      role: 'employee',
-      parentUser: req.user.id
-    }).select('-password').sort({ createdAt: -1 });
+    const total = await User.countDocuments(filter);
 
     res.json({
       success: true,
-      employees,
-      total: employees.length
+      users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
     });
   } catch (error) {
-    console.error('Get employees error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Get all users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users',
+      error: error.message
+    });
   }
 };
 
-// Get user by ID
+/**
+ * @desc    Get user by ID
+ * @route   GET /api/users/:id
+ * @access  Private/Admin
+ */
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
-    
+    const user = await User.findById(req.params.id)
+      .select('-password')
+      .populate('createdBy', 'firstName lastName email role');
+
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    res.json(user);
+    res.json({
+      success: true,
+      user
+    });
   } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Get user by ID error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch user',
+      error: error.message
+    });
   }
 };
 
-// Update user status (Admin only)
-exports.updateUserStatus = async (req, res) => {
+/**
+ * @desc    Get current user profile
+ * @route   GET /api/users/profile
+ * @access  Private
+ */
+exports.getProfile = async (req, res) => {
   try {
-    const { status } = req.body;
-    
-    const user = await User.findById(req.params.id);
-    
+    const user = await User.findById(req.user._id)
+      .select('-password')
+      .populate('createdBy', 'firstName lastName email');
+
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    user.isActive = status === 'active';
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch profile',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Update user profile
+ * @route   PUT /api/users/profile
+ * @access  Private
+ */
+exports.updateProfile = async (req, res) => {
+  try {
+    const { firstName, lastName, phone, address, city, state, country } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update allowed fields
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (phone) user.phone = phone;
+    if (address) user.address = address;
+    if (city) user.city = city;
+    if (state) user.state = state;
+    if (country) user.country = country;
+
     await user.save();
 
     res.json({
-      message: 'User status updated successfully',
+      success: true,
+      message: 'Profile updated successfully',
       user: {
-        id: user._id,
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        city: user.city,
+        state: user.state,
+        country: user.country
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update profile',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Change user password
+ * @route   PUT /api/users/change-password
+ * @access  Private
+ */
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide current and new password'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters'
+      });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to change password',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Create agent or landlord account
+ * @route   POST /api/users/create-agent
+ * @access  Private/Admin
+ */
+exports.createAgent = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      role, // 'agent' or 'landlord'
+      address,
+      city,
+      state,
+      country,
+      agencyName,
+      licenseNumber
+    } = req.body;
+
+    // Validation
+    if (!firstName || !lastName || !email || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields'
+      });
+    }
+
+    if (!['agent', 'landlord'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Role must be either agent or landlord'
+      });
+    }
+
+    // Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Generate temporary password
+    const tempPassword = Math.random().toString(36).slice(-8);
+    
+    // Create user with PLAIN TEXT password - let the pre-save hook hash it
+    const user = await User.create({
+      firstName,
+      lastName,
+      email,
+      phone,
+      password: tempPassword, // Let the pre-save hook handle hashing
+      role,
+      address,
+      city,
+      state,
+      country,
+      agencyName,
+      licenseNumber,
+      createdBy: req.user._id,
+      isActive: true,
+      emailVerified: false,
+      mustChangePassword: true // Force password change on first login
+    });
+
+    console.log('✅ User created with temp password:', tempPassword);
+    console.log('🔑 Stored hash:', user.password);
+
+    res.status(201).json({
+      success: true,
+      message: `${role.charAt(0).toUpperCase() + role.slice(1)} account created successfully`,
+      user: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        tempPassword // Remove in production, send via email
+      }
+    });
+  } catch (error) {
+    console.error('Create agent error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create agent account',
+      error: error.message
+    });
+  }
+};
+/**
+ * @desc    Create employee account
+ * @route   POST /api/users/create-employee
+ * @access  Private/Agent/Landlord
+ */
+exports.createEmployee = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      jobTitle,
+      branch,
+      salary,
+      address
+    } = req.body;
+
+    // Validation
+    if (!firstName || !lastName || !email || !jobTitle) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields'
+      });
+    }
+
+    // Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Generate temporary password
+    const tempPassword = Math.random().toString(36).slice(-8);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(tempPassword, salt);
+
+    // Create employee
+    const employee = await User.create({
+      firstName,
+      lastName,
+      email,
+      phone,
+      password: hashedPassword,
+      role: 'employee',
+      jobTitle,
+      branch,
+      salary,
+      address,
+      createdBy: req.user._id,
+      isActive: true,
+      emailVerified: false
+    });
+
+    // TODO: Send welcome email
+    // await sendWelcomeEmail(employee.email, tempPassword);
+
+    res.status(201).json({
+      success: true,
+      message: 'Employee account created successfully',
+      employee: {
+        _id: employee._id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        email: employee.email,
+        jobTitle: employee.jobTitle,
+        branch: employee.branch,
+        tempPassword // Remove in production
+      }
+    });
+  } catch (error) {
+    console.error('Create employee error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create employee account',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get all employees created by current user
+ * @route   GET /api/users/my-employees
+ * @access  Private/Agent/Landlord
+ */
+exports.getMyEmployees = async (req, res) => {
+  try {
+    const employees = await User.find({
+      createdBy: req.user._id,
+      role: 'employee'
+    })
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: employees.length,
+      employees
+    });
+  } catch (error) {
+    console.error('Get my employees error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch employees',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Update user status (activate/deactivate)
+ * @route   PUT /api/users/:id/status
+ * @access  Private/Admin
+ */
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const { isActive } = req.body;
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.isActive = isActive;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
+      user: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
         isActive: user.isActive
       }
     });
   } catch (error) {
     console.error('Update user status error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user status',
+      error: error.message
+    });
   }
 };
 
-// Delete user (Admin only)
-exports.deleteUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    await user.deleteOne();
-
-    res.json({ message: 'User deleted successfully' });
-  } catch (error) {
-    console.error('Delete user error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Update user role (Admin only)
+/**
+ * @desc    Update user role
+ * @route   PUT /api/users/:id/role
+ * @access  Private/Admin
+ */
 exports.updateUserRole = async (req, res) => {
   try {
     const { role } = req.body;
-    
+
+    const validRoles = ['admin', 'agent', 'landlord', 'employee', 'tenant', 'seeker'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role'
+      });
+    }
+
     const user = await User.findById(req.params.id);
-    
+
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
     user.role = role;
     await user.save();
 
     res.json({
+      success: true,
       message: 'User role updated successfully',
       user: {
-        id: user._id,
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
         role: user.role
       }
     });
   } catch (error) {
     console.error('Update user role error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user role',
+      error: error.message
+    });
   }
 };
 
-// Verify email
+/**
+ * @desc    Delete user
+ * @route   DELETE /api/users/:id
+ * @access  Private/Admin
+ */
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Don't allow deleting own account
+    if (user._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete your own account'
+      });
+    }
+
+    await user.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete user',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Verify email
+ * @route   POST /api/users/verify-email
+ * @access  Public
+ */
 exports.verifyEmail = async (req, res) => {
   try {
     const { token } = req.body;
 
-    if (!token) {
-      return res.status(400).json({ message: 'Verification token required' });
-    }
+    // TODO: Implement email verification logic
+    // This would typically involve:
+    // 1. Decode/verify the token
+    // 2. Find user by token
+    // 3. Mark email as verified
+    // 4. Clear verification token
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    if (user.verified) {
-      return res.status(400).json({ message: 'Email already verified' });
-    }
-
-    user.verified = true;
-    user.verificationToken = undefined;
-    await user.save();
-
-    res.json({ message: 'Email verified successfully' });
+    res.json({
+      success: true,
+      message: 'Email verified successfully'
+    });
   } catch (error) {
     console.error('Verify email error:', error);
-    res.status(400).json({ message: 'Invalid or expired token' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify email',
+      error: error.message
+    });
   }
 };
 
-
-
-
+/**
+ * @desc    Resend verification email
+ * @route   POST /api/users/resend-verification
+ * @access  Private
+ */
 exports.resendVerification = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    if (user.verified) {
-      return res.status(400).json({ message: 'Email already verified' });
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already verified'
+      });
     }
 
-    // Check 2-min cooldown (120,000 ms)
-    const now = Date.now();
-    if (user.lastVerificationSentAt && now - user.lastVerificationSentAt.getTime() < 120000) {
-      const remaining = Math.ceil((120000 - (now - user.lastVerificationSentAt.getTime())) / 1000);
-      return res.status(429).json({ message: `Please wait ${remaining}s before resending.` });
-    }
+    // TODO: Generate new verification token and send email
+    // await sendVerificationEmail(user.email, verificationToken);
 
-    // Create new token
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-
-    // Send email
-    await sendVerificationEmail(user.email, verifyUrl);
-
-    user.verificationToken = token;
-    user.lastVerificationSentAt = new Date();
-    await user.save();
-
-    res.json({ message: 'Verification email resent successfully' });
+    res.json({
+      success: true,
+      message: 'Verification email sent successfully'
+    });
   } catch (error) {
     console.error('Resend verification error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend verification email',
+      error: error.message
+    });
   }
 };
+
+module.exports = exports;

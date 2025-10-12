@@ -4,11 +4,16 @@ import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
 import App from './App';
+import { NotificationProvider } from './context/NotificationContext';
+import { AuthProvider } from './context/AuthContext';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
+     <AuthProvider>
+    <NotificationProvider>
+     
     <BrowserRouter>
       <App />
       <Toaster 
@@ -32,5 +37,9 @@ root.render(
         }}
       />
     </BrowserRouter>
+    </NotificationProvider>
+    </AuthProvider>
+
+    
   </React.StrictMode>
 );

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import authService from "../../services/AuthService";
+import authService from "../../services/authService";
 
 const VerifyEmail = () => {
   const [status, setStatus] = useState("verifying"); // verifying | success | error

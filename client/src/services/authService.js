@@ -1,3 +1,4 @@
+// client/src/services/authService.js
 import { apiMethods } from './api';
 
 const authService = {
@@ -22,11 +23,44 @@ const authService = {
     }
   },
 
+  // First login password change
+  firstLoginChangePassword: async (data) => {
+    try {
+      const response = await apiMethods.post('/auth/first-login-change-password', data);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Get current user
   getCurrentUser: async () => {
     try {
-      const response = await apiMethods.get('/auth/me');
+      const response = await apiMethods.get('/users/profile');
       return response.user;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get user via auth/me endpoint
+  getMe: async () => {
+    try {
+      const response = await apiMethods.get('/auth/me');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Change password
+  changePassword: async (currentPassword, newPassword) => {
+    try {
+      const response = await apiMethods.post('/auth/change-password', {
+        currentPassword,
+        newPassword
+      });
+      return response;
     } catch (error) {
       throw error;
     }
@@ -48,19 +82,6 @@ const authService = {
       const response = await apiMethods.post('/auth/reset-password', { 
         token, 
         password 
-      });
-      return response;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Change password
-  changePassword: async (currentPassword, newPassword) => {
-    try {
-      const response = await apiMethods.post('/auth/change-password', {
-        currentPassword,
-        newPassword
       });
       return response;
     } catch (error) {
@@ -111,11 +132,17 @@ const authService = {
     }
   },
 
-  // Logout user (client-side only)
-  logout: () => {
-    localStorage.removeItem('token');
-    // Clear any other stored data
-    localStorage.removeItem('user');
+  // Logout user
+  logout: async () => {
+    try {
+      await apiMethods.post('/auth/logout');
+    } catch (error) {
+      console.error('Logout API error:', error);
+    } finally {
+      // Always clear local storage even if API fails
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
   }
 };
 
