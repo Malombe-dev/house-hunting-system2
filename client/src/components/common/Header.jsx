@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useNotifications } from '../../context/NotificationContext';
 import { 
   HomeIcon, 
   BuildingOfficeIcon, 
   UserIcon, 
-  BellIcon,
   Bars3Icon,
   XMarkIcon,
   ChevronDownIcon,
@@ -17,10 +15,8 @@ import {
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
   const { user, isAuthenticated, logout } = useAuth();
-  const { notifications, unreadCount, markAsRead } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -28,18 +24,6 @@ const Header = () => {
     logout();
     navigate('/');
     setIsUserMenuOpen(false);
-  };
-
-  const handleNotificationClick = (notification) => {
-    if (!notification.read) {
-      markAsRead(notification._id);
-    }
-    setIsNotificationsOpen(false);
-    
-    // Navigate based on notification type
-    if (notification.link) {
-      navigate(notification.link);
-    }
   };
 
   const getDashboardLink = () => {
@@ -105,73 +89,6 @@ const Header = () => {
           <div className="flex items-center space-x-4">
             {isAuthenticated ? (
               <>
-                {/* Notifications */}
-                <div className="relative">
-                  <button
-                    onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors relative"
-                  >
-                    <BellIcon className="h-5 w-5" />
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 h-5 w-5 bg-danger-500 text-white text-xs rounded-full flex items-center justify-center">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Notifications Dropdown */}
-                  {isNotificationsOpen && (
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                      <div className="px-4 py-2 border-b border-gray-200">
-                        <h3 className="text-sm font-semibold text-gray-900">
-                          Notifications
-                        </h3>
-                      </div>
-                      <div className="max-h-80 overflow-y-auto">
-                        {notifications.length > 0 ? (
-                          notifications.slice(0, 5).map((notification) => (
-                            <div
-                              key={notification._id}
-                              onClick={() => handleNotificationClick(notification)}
-                              className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-l-4 ${
-                                notification.read 
-                                  ? 'border-transparent' 
-                                  : 'border-primary-500 bg-primary-50'
-                              }`}
-                            >
-                              <p className="text-sm text-gray-900 font-medium">
-                                {notification.title}
-                              </p>
-                              <p className="text-xs text-gray-600 mt-1">
-                                {notification.message}
-                              </p>
-                              <p className="text-xs text-gray-400 mt-1">
-                                {new Date(notification.createdAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="px-4 py-6 text-center text-gray-500">
-                            <BellIcon className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                            <p className="text-sm">No notifications</p>
-                          </div>
-                        )}
-                      </div>
-                      {notifications.length > 5 && (
-                        <div className="px-4 py-2 border-t border-gray-200">
-                          <Link
-                            to="/notifications"
-                            className="text-sm text-primary-600 hover:text-primary-800"
-                            onClick={() => setIsNotificationsOpen(false)}
-                          >
-                            View all notifications
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
                 {/* User Menu */}
                 <div className="relative">
                   <button

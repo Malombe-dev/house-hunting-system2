@@ -1,9 +1,10 @@
 // client/src/components/forms/CreateEmployeeForm.jsx
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { EyeIcon, EyeSlashIcon, UserIcon, BriefcaseIcon } from '@heroicons/react/24/outline';
+import { EyeIcon, EyeSlashIcon, UserIcon } from '@heroicons/react/24/outline';
 import { ButtonLoader } from '../common/LoadingSpinner';
-import api from '../../services/api';
+import { apiMethods } from '../../services/api';
+import toast from 'react-hot-toast';
 
 const CreateEmployeeForm = ({ onSuccess, onCancel }) => {
   const [showPassword, setShowPassword] = useState(false);
@@ -12,28 +13,58 @@ const CreateEmployeeForm = ({ onSuccess, onCancel }) => {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors }
-  } = useForm();
-
-  const onSubmit = async (data) => {
-    setIsLoading(true);
-    try {
-      const response = await api.post('/users/create-employee', data);
-
-      if (response.data.success) {
-        alert('Employee account created successfully!');
-        onSuccess && onSuccess(response.data.user);
+  } = useForm({
+    defaultValues: {
+      permissions: {
+        canCreateTenants: true,
+        canViewReports: false,
+        canManageProperties: false,
+        canHandlePayments: false
       }
-    } catch (error) {
-      console.error('Create employee error:', error);
-      alert(error.response?.data?.message || 'Failed to create employee account');
-    } finally {
-      setIsLoading(false);
     }
-  };
+  });
+
+
+const onSubmit = async (data) => {
+  setIsLoading(true);
+  try {
+    console.log('Creating employee with data:', data);
+    
+    const response = await apiMethods.post('/users/create-employee', data);
+    console.log('Create employee response:', response);
+
+    if (response.success) {
+      const employee = response.employee;
+      toast.success('Employee account created successfully!');
+      
+      // Show temporary password in a more prominent way
+      alert(
+        `Employee Account Created!\n\n` +
+        `Name: ${employee.firstName} ${employee.lastName}\n` +
+        `Email: ${employee.email}\n` +
+        `Role: Employee\n` +
+        `Permissions: ${Object.keys(employee.permissions || {}).filter(key => employee.permissions[key]).join(', ') || 'None'}\n` +
+        `Temporary Password: ${employee.tempPassword}\n\n` +
+        `⚠️ IMPORTANT: Save this password securely!\n` +
+        `The employee will be required to change it on first login.\n` +
+        `They will be redirected to the employee dashboard.`
+      );
+      
+      onSuccess && onSuccess(employee);
+    }
+  } catch (error) {
+    console.error('Create employee error:', error);
+    const errorMessage = error.message || error.error || 'Failed to create employee account';
+    toast.error(errorMessage);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white rounded-lg shadow-md p-6 max-h-[90vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">
           Create Employee Account
@@ -104,8 +135,8 @@ const CreateEmployeeForm = ({ onSuccess, onCancel }) => {
             {...register('phone', {
               required: 'Phone is required',
               pattern: {
-                value: /^[\+]?[1-9][\d]{0,15}$/,
-                message: 'Invalid phone'
+                value: /^[\+]?[0-9]{10,15}$/,
+                message: 'Invalid phone number'
               }
             })}
             className={`input-field ${errors.phone ? 'input-error' : ''}`}
@@ -124,13 +155,13 @@ const CreateEmployeeForm = ({ onSuccess, onCancel }) => {
             className={`input-field ${errors.jobTitle ? 'input-error' : ''}`}
           >
             <option value="">Select position</option>
-            <option value="property_manager">Property Manager</option>
-            <option value="leasing_agent">Leasing Agent</option>
-            <option value="maintenance_coordinator">Maintenance Coordinator</option>
-            <option value="customer_service">Customer Service</option>
-            <option value="accountant">Accountant</option>
-            <option value="receptionist">Receptionist</option>
-            <option value="other">Other</option>
+            <option value="Property Manager">Property Manager</option>
+            <option value="Leasing Agent">Leasing Agent</option>
+            <option value="Maintenance Coordinator">Maintenance Coordinator</option>
+            <option value="Customer Service">Customer Service</option>
+            <option value="Accountant">Accountant</option>
+            <option value="Receptionist">Receptionist</option>
+            <option value="Other">Other</option>
           </select>
           {errors.jobTitle && (
             <p className="error-text">{errors.jobTitle.message}</p>
@@ -148,105 +179,111 @@ const CreateEmployeeForm = ({ onSuccess, onCancel }) => {
         </div>
 
         <div>
-          <label className="label-text">Employee ID (Optional)</label>
+          <label className="label-text">Salary (Optional)</label>
           <input
-            type="text"
-            {...register('employeeId')}
+            type="number"
+            {...register('salary', { min: 0 })}
             className="input-field"
-            placeholder="EMP-001"
+            placeholder="50000"
+          />
+        </div>
+
+        <div>
+          <label className="label-text">Address (Optional)</label>
+          <textarea
+            {...register('address')}
+            className="input-field"
+            rows="2"
+            placeholder="Street address, city, etc."
           />
         </div>
 
         {/* Permissions */}
-        <div>
-          <label className="label-text">Permissions</label>
-          <div className="space-y-2 mt-2">
-            <label className="flex items-center">
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            Employee Permissions
+          </label>
+          <div className="space-y-3">
+            <label className="flex items-start">
               <input
                 type="checkbox"
                 {...register('permissions.canCreateTenants')}
-                defaultChecked
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 mt-1 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">
-                Can create and manage tenants
+              <span className="ml-3">
+                <span className="block text-sm font-medium text-gray-900">
+                  Can create and manage tenants
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Add new tenants, update tenant information
+                </span>
               </span>
             </label>
 
-            <label className="flex items-center">
+            <label className="flex items-start">
               <input
                 type="checkbox"
                 {...register('permissions.canViewReports')}
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 mt-1 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">
-                Can view financial reports
+              <span className="ml-3">
+                <span className="block text-sm font-medium text-gray-900">
+                  Can view financial reports
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Access to analytics and financial data
+                </span>
               </span>
             </label>
 
-            <label className="flex items-center">
+            <label className="flex items-start">
               <input
                 type="checkbox"
                 {...register('permissions.canManageProperties')}
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 mt-1 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">
-                Can manage property listings
+              <span className="ml-3">
+                <span className="block text-sm font-medium text-gray-900">
+                  Can manage property listings
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Create, edit, and manage properties
+                </span>
               </span>
             </label>
 
-            <label className="flex items-center">
+            <label className="flex items-start">
               <input
                 type="checkbox"
                 {...register('permissions.canHandlePayments')}
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 mt-1 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">
-                Can record and manage payments
+              <span className="ml-3">
+                <span className="block text-sm font-medium text-gray-900">
+                  Can record and manage payments
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Record rent payments and generate receipts
+                </span>
               </span>
             </label>
           </div>
         </div>
 
-        {/* Password */}
-        <div>
-          <label className="label-text">Initial Password *</label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              {...register('password', {
-                required: 'Password is required',
-                minLength: { value: 8, message: 'Min 8 characters' }
-              })}
-              className={`input-field pr-10 ${errors.password ? 'input-error' : ''}`}
-              placeholder="Create password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
-            >
-              {showPassword ? (
-                <EyeSlashIcon className="h-5 w-5 text-gray-400" />
-              ) : (
-                <EyeIcon className="h-5 w-5 text-gray-400" />
-              )}
-            </button>
-          </div>
-          {errors.password && (
-            <p className="error-text">{errors.password.message}</p>
-          )}
-          <p className="text-xs text-gray-500 mt-1">
-            Employee will be required to change password on first login
+        {/* Info Note */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            <strong>Note:</strong> A temporary password will be automatically generated. 
+            The employee will be required to change it on first login.
           </p>
         </div>
 
         {/* Submit Buttons */}
-        <div className="flex justify-end space-x-3 pt-4">
+        <div className="flex justify-end space-x-3 pt-4 border-t">
           <button
             type="button"
             onClick={onCancel}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
             disabled={isLoading}
           >
             Cancel

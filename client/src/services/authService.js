@@ -143,6 +143,136 @@ const authService = {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     }
+  },
+
+  // USER MANAGEMENT METHODS - ADDED:
+
+  // Get all users with optional filters
+  getAllUsers: async (filters = {}) => {
+    try {
+      const response = await apiMethods.get('/users', { params: filters });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get specific user details
+  getUserDetails: async (userId) => {
+    try {
+      const response = await apiMethods.get(`/users/${userId}/details`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Update user status (active/inactive)
+  updateUserStatus: async (userId, statusData) => {
+    try {
+      const response = await apiMethods.patch(`/users/${userId}/status`, statusData);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Delete user
+  deleteUser: async (userId) => {
+    try {
+      const response = await apiMethods.delete(`/users/${userId}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Create agent/landlord (admin function)
+  createAgent: async (userData) => {
+    try {
+      const response = await apiMethods.post('/users/agents', userData);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Update user information
+  updateUser: async (userId, userData) => {
+    try {
+      const response = await apiMethods.put(`/users/${userId}`, userData);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get user hierarchy/stats
+  getUserHierarchy: async (userId) => {
+    try {
+      const response = await apiMethods.get(`/users/${userId}/hierarchy`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get user permissions
+  getUserPermissions: async (userId) => {
+    try {
+      const response = await apiMethods.get(`/users/${userId}/permissions`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Update user permissions
+  updateUserPermissions: async (userId, permissions) => {
+    try {
+      const response = await apiMethods.patch(`/users/${userId}/permissions`, permissions);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get user activity/logs
+  getUserActivity: async (userId, limit = 10) => {
+    try {
+      const response = await apiMethods.get(`/users/${userId}/activity`, { 
+        params: { limit } 
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Bulk update users
+  bulkUpdateUsers: async (userIds, updateData) => {
+    try {
+      const response = await apiMethods.patch('/users/bulk-update', {
+        userIds,
+        updateData
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Export users data
+  exportUsers: async (filters = {}) => {
+    try {
+      const response = await apiMethods.get('/users/export', { 
+        params: filters,
+        responseType: 'blob'
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

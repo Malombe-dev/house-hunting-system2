@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/house-hunting';
-const AGENT_EMAIL = 'landlord@gmail.com';
+const AGENT_EMAIL = 'vincentmutinda50@gmail.com';
 const NEW_PASSWORD = 'TempPass123';
 
 async function finalWorkingReset() {

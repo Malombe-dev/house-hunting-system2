@@ -112,7 +112,7 @@ const FirstLoginChangePassword = () => {
       admin: '/admin/dashboard',
       agent: '/agent/dashboard',
       landlord: '/agent/dashboard',
-      employee: '/agent/dashboard',
+      employee: '/employee/dashboard', 
       tenant: '/tenant/dashboard',
       seeker: '/seeker/properties'
     };

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import Sidebar from '../components/common/Sidebar';
+import NotificationsDropdown from '../pages/shared/NotificationsDropdown';
 import { 
   ChartBarIcon,
   HomeIcon,
@@ -132,16 +133,8 @@ const AgentLayout = () => {
                   </button>
                 </div>
 
-                {/* Notifications */}
-                <button className="relative p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary-500 rounded-full">
-                  <span className="sr-only">View notifications</span>
-                  <BellIcon className="h-6 w-6" />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-400 text-center text-xs font-medium leading-4 text-white">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                  )}
-                </button>
+                {/* 🔔 REPLACE THE OLD NOTIFICATIONS BUTTON WITH NOTIFICATIONSDROPDOWN 🔔 */}
+                <NotificationsDropdown />
 
                 {/* User info */}
                 <div className="hidden lg:flex lg:items-center lg:space-x-3">

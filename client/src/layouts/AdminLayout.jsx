@@ -60,7 +60,7 @@ const AdminLayout = () => {
   const userMenuItems = [
     {
       name: 'Your Profile',
-      href: '/profile',
+      href: '/Profile',
       icon: UserIcon
     },
     {

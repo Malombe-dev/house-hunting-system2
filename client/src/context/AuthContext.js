@@ -92,7 +92,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Login function - UPDATED to match your response structure
-// In AuthContext.js - update the login function
+// In AuthContext.js - update the login function to properly handle employee redirection
 const login = async (credentials) => {
   dispatch({ type: 'AUTH_START' });
   
@@ -125,8 +125,16 @@ const login = async (credentials) => {
         payload: { user: data.user, token: data.token }
       });
       
+      // Get redirect path based on user role
+      const redirectPath = getRoleBasedRedirect(data.user.role);
+      console.log(`🔄 AuthContext - Redirecting ${data.user.role} to: ${redirectPath}`);
+      
       toast.success(`Welcome back, ${data.user.firstName}!`);
-      return { success: true, user: data.user };
+      return { 
+        success: true, 
+        user: data.user,
+        redirectTo: redirectPath 
+      };
     } else {
       throw new Error('Invalid response structure from server');
     }
@@ -150,6 +158,25 @@ const login = async (credentials) => {
     
     toast.error(errorMessage);
     return { success: false, error: errorMessage };
+  }
+};
+
+// Add this helper function to AuthContext
+const getRoleBasedRedirect = (role) => {
+  switch (role) {
+    case 'admin':
+      return '/admin/dashboard';
+    case 'agent':
+    case 'landlord':
+      return '/agent/dashboard';
+    case 'employee':
+      return '/employee/dashboard';
+    case 'tenant':
+      return '/tenant/dashboard';
+    case 'seeker':
+      return '/';
+    default:
+      return '/';
   }
 };
   // Register function

@@ -338,7 +338,8 @@ exports.createEmployee = async (req, res) => {
       jobTitle,
       branch,
       salary,
-      address
+      address,
+      permissions // ← ADD THIS: Accept permissions from request body
     } = req.body;
 
     // Validation
@@ -360,28 +361,33 @@ exports.createEmployee = async (req, res) => {
 
     // Generate temporary password
     const tempPassword = Math.random().toString(36).slice(-8);
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(tempPassword, salt);
-
-    // Create employee
+    
+    // Create employee with permissions
     const employee = await User.create({
       firstName,
       lastName,
       email,
       phone,
-      password: hashedPassword,
+      password: tempPassword, // Let pre-save hook handle hashing
       role: 'employee',
       jobTitle,
       branch,
       salary,
       address,
+      permissions: permissions || { // ← ADD THIS: Save permissions to database
+        canCreateTenants: false,
+        canViewReports: false,
+        canManageProperties: false,
+        canHandlePayments: false
+      },
       createdBy: req.user._id,
       isActive: true,
-      emailVerified: false
+      emailVerified: false,
+      mustChangePassword: true // ← ADD THIS: Force password change on first login
     });
 
-    // TODO: Send welcome email
-    // await sendWelcomeEmail(employee.email, tempPassword);
+    console.log('✅ Employee created with temp password:', tempPassword);
+    console.log('🔐 Employee permissions:', employee.permissions);
 
     res.status(201).json({
       success: true,
@@ -393,6 +399,7 @@ exports.createEmployee = async (req, res) => {
         email: employee.email,
         jobTitle: employee.jobTitle,
         branch: employee.branch,
+        permissions: employee.permissions, // ← ADD THIS: Return permissions in response
         tempPassword // Remove in production
       }
     });
@@ -423,7 +430,17 @@ exports.getMyEmployees = async (req, res) => {
     res.json({
       success: true,
       count: employees.length,
-      employees
+      employees: employees.map(emp => ({
+        _id: emp._id,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        email: emp.email,
+        jobTitle: emp.jobTitle,
+        branch: emp.branch,
+        permissions: emp.permissions, // ← ADD THIS
+        isActive: emp.isActive,
+        createdAt: emp.createdAt
+      }))
     });
   } catch (error) {
     console.error('Get my employees error:', error);

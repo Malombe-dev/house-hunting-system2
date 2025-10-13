@@ -1,4 +1,4 @@
-// client/src/pages/admin/UserManagement.jsx (UPDATED WITH REAL API)
+// client/src/pages/admin/UserManagement.jsx
 import React, { useState, useEffect } from 'react';
 import { 
   MagnifyingGlassIcon,
@@ -9,7 +9,8 @@ import {
   UserGroupIcon,
   BriefcaseIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  PowerIcon
 } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal, { ConfirmModal } from '../../components/common/Modal';
@@ -39,7 +40,6 @@ const UserManagement = () => {
   useEffect(() => {
     fetchUsers();
   }, [roleFilter, statusFilter]);
-  
 
   const fetchUsers = async () => {
     try {
@@ -50,14 +50,24 @@ const UserManagement = () => {
         search: searchTerm
       };
       
-      const data = await userService.getAllUsers(filters);
+      const response = await userService.getAllUsers(filters);
       
-      setUsers(data.users || []); // Log the entire response
-     
-
+      // Handle different response structures
+      const usersData = response.data?.users || response.users || response.data || response;
+      
+      if (Array.isArray(usersData)) {
+        setUsers(usersData);
+      } else if (usersData && Array.isArray(usersData.users)) {
+        setUsers(usersData.users);
+      } else {
+        console.error('Unexpected response format:', response);
+        setUsers([]);
+      }
+      
     } catch (error) {
       console.error('Error fetching users:', error);
       showNotification('Failed to load users', 'error');
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -70,16 +80,19 @@ const UserManagement = () => {
       
       if (userRole === 'agent' || userRole === 'landlord') {
         const data = await hierarchyService.getAgentDetails(userId);
-        setUserDetails(data.data);
+        setUserDetails(data.data || data);
       } else if (userRole === 'employee') {
         const data = await hierarchyService.getEmployeeStats(userId);
-        setUserDetails(data.data);
+        setUserDetails(data.data || data);
       } else {
-        setUserDetails({ user: selectedUser });
+        // For other roles, get basic user details
+        const data = await userService.getUserDetails(userId);
+        setUserDetails(data.data || data);
       }
     } catch (error) {
       console.error('Error fetching user details:', error);
       showNotification('Failed to load user details', 'error');
+      setUserDetails({ user: selectedUser }); // Fallback to basic user info
     } finally {
       setLoadingDetails(false);
     }
@@ -109,6 +122,31 @@ const UserManagement = () => {
     }
   };
 
+  const toggleUserStatus = async (user) => {
+    try {
+      const newStatus = !user.isActive;
+      await userService.updateUserStatus(user._id, { isActive: newStatus });
+      
+      // Update local state
+      setUsers(prev => prev.map(u => 
+        u._id === user._id ? { ...u, isActive: newStatus } : u
+      ));
+      
+      // If viewing this user, update the selected user as well
+      if (selectedUser && selectedUser._id === user._id) {
+        setSelectedUser(prev => ({ ...prev, isActive: newStatus }));
+      }
+      
+      showNotification(
+        `User ${newStatus ? 'activated' : 'deactivated'} successfully`, 
+        'success'
+      );
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      showNotification('Failed to update user status', 'error');
+    }
+  };
+
   const handleCreateAgent = () => {
     setShowCreateAgentModal(true);
   };
@@ -120,6 +158,7 @@ const UserManagement = () => {
   };
 
   const handleSearch = () => {
+    setCurrentPage(1);
     fetchUsers();
   };
 
@@ -131,7 +170,8 @@ const UserManagement = () => {
     return (
       user.firstName?.toLowerCase().includes(searchLower) ||
       user.lastName?.toLowerCase().includes(searchLower) ||
-      user.email?.toLowerCase().includes(searchLower)
+      user.email?.toLowerCase().includes(searchLower) ||
+      user.phone?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -154,6 +194,7 @@ const UserManagement = () => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-KE', {
       year: 'numeric',
       month: 'short',
@@ -226,7 +267,7 @@ const UserManagement = () => {
             </div>
             <input
               type="text"
-              placeholder="Search users..."
+              placeholder="Search users by name, email, or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -234,13 +275,21 @@ const UserManagement = () => {
             />
           </div>
 
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <FunnelIcon className="h-5 w-5" />
-            <span>Filters</span>
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+            >
+              Search
+            </button>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              <FunnelIcon className="h-5 w-5" />
+              <span>Filters</span>
+            </button>
+          </div>
         </div>
 
         {showFilters && (
@@ -281,8 +330,9 @@ const UserManagement = () => {
                   setSearchTerm('');
                   setRoleFilter('');
                   setStatusFilter('');
+                  setCurrentPage(1);
                 }}
-                className="text-sm text-primary-600 hover:text-primary-700"
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Clear Filters
               </button>
@@ -320,6 +370,9 @@ const UserManagement = () => {
                             {user.firstName} {user.lastName}
                           </div>
                           <div className="text-sm text-gray-500">{user.email}</div>
+                          {user.phone && (
+                            <div className="text-sm text-gray-400">{user.phone}</div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -339,29 +392,28 @@ const UserManagement = () => {
                       {formatDate(user.createdAt)}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleViewUser(user)}
-                          className="text-blue-600 hover:text-blue-900 p-1"
-                          title="View Details"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(user)}
-                          className="text-red-600 hover:text-red-900 p-1"
-                          title="Delete"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
+                      <UserActions 
+                        user={user}
+                        onView={handleViewUser}
+                        onDelete={handleDeleteUser}
+                        onToggleStatus={toggleUserStatus}
+                      />
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
-                    No users found
+                    <div className="flex flex-col items-center">
+                      <UserGroupIcon className="h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-lg font-medium text-gray-900 mb-2">No users found</p>
+                      <p className="text-gray-600">
+                        {searchTerm || roleFilter || statusFilter 
+                          ? 'Try adjusting your search or filters' 
+                          : 'No users have been created yet'
+                        }
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -427,7 +479,11 @@ const UserManagement = () => {
           </div>
         ) : userDetails ? (
           <UserDetailsWithHierarchy details={userDetails} user={selectedUser} />
-        ) : null}
+        ) : (
+          <div className="py-12 text-center text-gray-500">
+            Failed to load user details
+          </div>
+        )}
       </Modal>
 
       {/* Delete Confirmation */}
@@ -467,21 +523,63 @@ const StatCard = ({ title, value, icon: Icon, color }) => {
   );
 };
 
+// User Actions Component
+const UserActions = ({ user, onView, onDelete, onToggleStatus }) => (
+  <div className="flex justify-end space-x-2">
+    <button
+      onClick={() => onToggleStatus(user)}
+      className={`p-2 rounded-lg transition-colors ${
+        user.isActive 
+          ? 'text-green-600 hover:text-green-900 hover:bg-green-50' 
+          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+      }`}
+      title={user.isActive ? 'Deactivate User' : 'Activate User'}
+    >
+      <PowerIcon className="h-4 w-4" />
+    </button>
+    <button
+      onClick={() => onView(user)}
+      className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
+      title="View Details"
+    >
+      <EyeIcon className="h-4 w-4" />
+    </button>
+    <button
+      onClick={() => onDelete(user)}
+      className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
+      title="Delete User"
+    >
+      <TrashIcon className="h-4 w-4" />
+    </button>
+  </div>
+);
+
 // User Details with Hierarchy Component
 const UserDetailsWithHierarchy = ({ details, user }) => {
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-KE', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-KE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
   const formatCurrency = (amount) => {
+    if (!amount) return 'KES 0';
     return new Intl.NumberFormat('en-KE', {
       style: 'currency',
       currency: 'KES',
       minimumFractionDigits: 0
     }).format(amount);
   };
+
+  // Safely access nested properties
+  const stats = details?.stats || {};
+  const employees = details?.employees || [];
+  const tenants = details?.tenants || [];
+  const parentAgent = details?.parentAgent || null;
+  const recentActivity = details?.recentActivity || {};
 
   return (
     <div className="space-y-6">
@@ -497,56 +595,83 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
             {user.firstName} {user.lastName}
           </h3>
           <p className="text-gray-600">{user.email}</p>
-          <p className="text-sm text-gray-500">Account ID: {user._id.slice(-8).toUpperCase()}</p>
+          <p className="text-sm text-gray-500 capitalize">Role: {user.role}</p>
+          <p className="text-sm text-gray-500">
+            Status: <span className={user.isActive ? 'text-green-600' : 'text-red-600'}>
+              {user.isActive ? 'Active' : 'Inactive'}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {/* Contact Information */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-600">Phone</p>
+          <p className="text-base font-medium text-gray-900">{user.phone || 'N/A'}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-600">Email Verified</p>
+          <p className="text-base font-medium text-gray-900">
+            {user.verified ? '✓ Yes' : '✗ No'}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-600">Member Since</p>
+          <p className="text-base font-medium text-gray-900">{formatDate(user.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-600">Last Login</p>
+          <p className="text-base font-medium text-gray-900">{formatDate(user.lastLogin)}</p>
         </div>
       </div>
 
       {/* Agent/Landlord Hierarchy */}
-      {(user.role === 'agent' || user.role === 'landlord') && details.stats && (
+      {(user.role === 'agent' || user.role === 'landlord') && (
         <div className="border-t pt-6">
           <h4 className="font-semibold text-gray-900 mb-4">Team & Statistics</h4>
           
           {/* Stats Grid */}
           <div className="grid grid-cols-4 gap-4 mb-6">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <p className="text-2xl font-bold text-blue-600">{details.stats.totalEmployees}</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.totalEmployees || 0}</p>
               <p className="text-sm text-gray-600">Employees</p>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-600">{details.stats.totalProperties}</p>
+              <p className="text-2xl font-bold text-green-600">{stats.totalProperties || 0}</p>
               <p className="text-sm text-gray-600">Properties</p>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <p className="text-2xl font-bold text-purple-600">{details.stats.totalTenants}</p>
+              <p className="text-2xl font-bold text-purple-600">{stats.totalTenants || 0}</p>
               <p className="text-sm text-gray-600">Tenants</p>
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <p className="text-2xl font-bold text-orange-600">{details.stats.occupancyRate}%</p>
+              <p className="text-2xl font-bold text-orange-600">{stats.occupancyRate || 0}%</p>
               <p className="text-sm text-gray-600">Occupancy</p>
             </div>
           </div>
 
           {/* Expected Rent */}
-          {details.stats.totalRentExpected && (
+          {stats.totalRentExpected && (
             <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
               <p className="text-sm text-gray-600">Total Expected Rent</p>
               <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(details.stats.totalRentExpected)}
+                {formatCurrency(stats.totalRentExpected)}
               </p>
             </div>
           )}
 
           {/* Employees List */}
-          {details.employees && details.employees.length > 0 && (
+          {employees.length > 0 && (
             <div>
-              <h5 className="font-medium text-gray-900 mb-3">Employees ({details.employees.length})</h5>
+              <h5 className="font-medium text-gray-900 mb-3">Employees ({employees.length})</h5>
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {details.employees.map((emp) => (
+                {employees.map((emp) => (
                   <div key={emp._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
                     <div className="flex items-center space-x-3">
                       <div className="h-8 w-8 bg-cyan-500 rounded-full flex items-center justify-center">
                         <span className="text-white text-sm font-medium">
-                          {emp.firstName[0]}{emp.lastName[0]}
+                          {emp.firstName?.[0]}{emp.lastName?.[0]}
                         </span>
                       </div>
                       <div>
@@ -573,11 +698,11 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
           )}
 
           {/* Recent Tenants */}
-          {details.tenants && details.tenants.length > 0 && (
+          {tenants.length > 0 && (
             <div className="mt-6">
               <h5 className="font-medium text-gray-900 mb-3">Recent Tenants</h5>
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {details.tenants.map((tenant) => (
+                {tenants.map((tenant) => (
                   <div key={tenant._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-900">
@@ -591,7 +716,7 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
                     <span className={`text-xs px-2 py-1 rounded-full ${
                       tenant.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
                     }`}>
-                      {tenant.status}
+                      {tenant.status || 'unknown'}
                     </span>
                   </div>
                 ))}
@@ -602,40 +727,40 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
       )}
 
       {/* Employee Stats */}
-      {user.role === 'employee' && details.stats && (
+      {user.role === 'employee' && (
         <div className="border-t pt-6">
           <h4 className="font-semibold text-gray-900 mb-4">Performance Statistics</h4>
           
           {/* Parent Agent Info */}
-          {details.parentAgent && (
+          {parentAgent && (
             <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-sm text-gray-600">Reports To</p>
               <p className="text-base font-semibold text-gray-900">
-                {details.parentAgent.firstName} {details.parentAgent.lastName}
+                {parentAgent.firstName} {parentAgent.lastName}
               </p>
-              <p className="text-sm text-gray-500 capitalize">{details.parentAgent.role}</p>
+              <p className="text-sm text-gray-500 capitalize">{parentAgent.role}</p>
             </div>
           )}
 
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <p className="text-2xl font-bold text-blue-600">{details.stats.tenantsCreated}</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.tenantsCreated || 0}</p>
               <p className="text-sm text-gray-600">Tenants Created</p>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-600">{details.stats.paymentsRecorded}</p>
+              <p className="text-2xl font-bold text-green-600">{stats.paymentsRecorded || 0}</p>
               <p className="text-sm text-gray-600">Payments Recorded</p>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
               <p className="text-2xl font-bold text-purple-600">
-                {formatCurrency(details.stats.totalPaymentsAmount)}
+                {formatCurrency(stats.totalPaymentsAmount)}
               </p>
               <p className="text-sm text-gray-600">Total Amount</p>
             </div>
           </div>
 
           {/* Performance Score */}
-          {details.stats.performanceScore !== undefined && (
+          {stats.performanceScore !== undefined && (
             <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
               <p className="text-sm text-gray-600 mb-2">Performance Score</p>
               <div className="flex items-center space-x-4">
@@ -643,36 +768,32 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
                   <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
-                      style={{ width: `${details.stats.performanceScore}%` }}
+                      style={{ width: `${stats.performanceScore}%` }}
                     />
                   </div>
                 </div>
                 <span className="text-2xl font-bold text-purple-600">
-                  {details.stats.performanceScore}
+                  {stats.performanceScore}%
                 </span>
               </div>
             </div>
           )}
 
           {/* Recent Activity */}
-          {details.recentActivity && (
+          {recentActivity.tenants?.length > 0 && (
             <div className="mt-6">
-              {details.recentActivity.tenants?.length > 0 && (
-                <div className="mb-4">
-                  <h5 className="font-medium text-gray-900 mb-2">Recent Tenants</h5>
-                  <div className="space-y-2">
-                    {details.recentActivity.tenants.slice(0, 3).map((tenant) => (
-                      <div key={tenant._id} className="p-2 bg-gray-50 rounded text-sm">
-                        <span className="font-medium">
-                          {tenant.user?.firstName} {tenant.user?.lastName}
-                        </span>
-                        <span className="text-gray-500"> at </span>
-                        <span className="text-gray-700">{tenant.property?.name}</span>
-                      </div>
-                    ))}
+              <h5 className="font-medium text-gray-900 mb-2">Recent Tenants</h5>
+              <div className="space-y-2">
+                {recentActivity.tenants.slice(0, 3).map((tenant) => (
+                  <div key={tenant._id} className="p-2 bg-gray-50 rounded text-sm">
+                    <span className="font-medium">
+                      {tenant.user?.firstName} {tenant.user?.lastName}
+                    </span>
+                    <span className="text-gray-500"> at </span>
+                    <span className="text-gray-700">{tenant.property?.name}</span>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -695,7 +816,7 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
             <div>
               <p className="text-sm text-gray-600">Email Verified</p>
               <p className="text-base font-medium text-gray-900">
-                {user.emailVerified ? '✓ Yes' : '✗ No'}
+                {user.verified ? '✓ Yes' : '✗ No'}
               </p>
             </div>
             <div>

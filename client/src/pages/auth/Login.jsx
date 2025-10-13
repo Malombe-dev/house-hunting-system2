@@ -76,22 +76,23 @@ const Login = () => {
     }
   };
 
-  const getRoleBasedRedirect = (role) => {
-    switch (role) {
-      case 'admin':
-        return '/admin/dashboard';
-      case 'agent':
-      case 'landlord':
-      case 'employee':
-        return '/agent/dashboard';
-      case 'tenant':
-        return '/tenant/dashboard';
-      case 'seeker':
-        return from === '/auth/login' ? '/' : from;
-      default:
-        return '/';
-    }
-  };
+const getRoleBasedRedirect = (role) => {
+  switch (role) {
+    case 'admin':
+      return '/admin/dashboard';
+    case 'agent':
+    case 'landlord':
+      return '/agent/dashboard';
+    case 'employee':
+      return '/employee/dashboard'; 
+    case 'tenant':
+      return '/tenant/dashboard';
+    case 'seeker':
+      return from === '/auth/login' ? '/' : from;
+    default:
+      return '/';
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50">

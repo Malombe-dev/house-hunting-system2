@@ -16,6 +16,7 @@ import PublicLayout from './layouts/PublicLayout';
 import AdminLayout from './layouts/AdminLayout';
 import AgentLayout from './layouts/AgentLayout';
 import TenantLayout from './layouts/TenantLayout';
+import EmployeeLayout from './layouts/EmployeeLayout';
 
 // Auth Pages
 import Login from './pages/auth/Login';
@@ -47,6 +48,8 @@ import PaymentTracking from './pages/agent/PaymentTracking';
 import MaintenanceRequests from './pages/agent/MaintenanceRequests';
 import AgentAnalytics from './pages/agent/AgentAnalytics';
 
+//employee pages 
+import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 // Tenant Pages
 import TenantDashboard from './pages/tenant/TenantDashboard';
 import RentPayments from './pages/tenant/RentPayments';
@@ -75,7 +78,9 @@ function App() {
               <Route index element={<Home />} />
               <Route path="properties" element={<PropertySearch />} />
               <Route path="properties/:id" element={<PropertyDetails />} />
-              <Route path="auth/first-login-change-password" element={<FirstLoginChangePassword />} />
+              {/* employee dashboard */}
+
+              <Route path='employee/dashboard' element={<EmployeeDashboard />} />             
 
               <Route path="create-agent" element={<CreateAgentForm />} />
               <Route path="create-employee" element={<CreateEmployeeForm />} />
@@ -86,7 +91,10 @@ function App() {
             <Route path="/auth/login" element={<Login />} />
             <Route path="/auth/register" element={<Register />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="auth/first-login-change-password" element={<FirstLoginChangePassword />} />
+
+              
 
 
             {/* Admin Routes */}
@@ -128,8 +136,24 @@ function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
               <Route path="properties/new" element={<PropertyForm />} />
-
             </Route>
+                          
+                {/* Employee Routes */}
+                <Route
+                  path="/employee/*"
+                  element={
+                    <ProtectedRoute allowedRoles={['employee']}>
+                      <EmployeeLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Navigate to="/employee/dashboard" replace />} />
+                  <Route path="dashboard" element={<EmployeeDashboard />} />
+                  <Route path="profile" element={<Profile />} />
+                  <Route path="settings" element={<Settings />} />
+                  
+                 
+                </Route>
 
             {/* Tenant Routes */}
             <Route
