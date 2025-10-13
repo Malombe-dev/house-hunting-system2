@@ -12,14 +12,6 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 
-/**
- * Employee Dashboard (UI-upgraded to match Admin styling)
- * - Keeps all existing logic from usePermissions exactly the same
- * - Uses placeholders for stats so you can plug in real API data later
- * - Avatar uses initials (Option 2)
- *
- * Paste this file over your current EmployeeDashboard.jsx
- */
 
 const EmployeeDashboard = () => {
   // keep your logic intact
@@ -40,7 +32,7 @@ const EmployeeDashboard = () => {
     {
       name: 'Add New Tenant',
       description: 'Create and onboard new tenants',
-      href: '/employee/tenants/new',
+      href: '/employee/create-tenant',
       icon: UserGroupIcon,
       color: 'bg-blue-500',
       show: canCreateTenants

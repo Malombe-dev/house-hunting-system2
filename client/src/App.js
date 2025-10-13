@@ -78,13 +78,9 @@ function App() {
               <Route index element={<Home />} />
               <Route path="properties" element={<PropertySearch />} />
               <Route path="properties/:id" element={<PropertyDetails />} />
-              {/* employee dashboard */}
-
-              <Route path='employee/dashboard' element={<EmployeeDashboard />} />             
-
+            
               <Route path="create-agent" element={<CreateAgentForm />} />
               <Route path="create-employee" element={<CreateEmployeeForm />} />
-              <Route path="create-tenant" element={<CreateTenantForm />} />
             </Route>
 
             {/* Auth Routes */}
@@ -128,7 +124,6 @@ function App() {
             >
               <Route index element={<Navigate to="/agent/dashboard" replace />} />
               <Route path="dashboard" element={<AgentDashboard />} />
-              <Route path="properties" element={<PropertyManagement />} />
               <Route path="tenants" element={<TenantManagement />} />
               <Route path="payments" element={<PaymentTracking />} />
               <Route path="maintenance" element={<MaintenanceRequests />} />
@@ -136,6 +131,8 @@ function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
               <Route path="properties/new" element={<PropertyForm />} />
+              <Route path="properties" element={<PropertyManagement />} />
+
             </Route>
                           
                 {/* Employee Routes */}
@@ -151,7 +148,13 @@ function App() {
                   <Route path="dashboard" element={<EmployeeDashboard />} />
                   <Route path="profile" element={<Profile />} />
                   <Route path="settings" element={<Settings />} />
-                  
+                  <Route path="tenants" element={<TenantManagement />} />
+                  <Route path="properties/new" element={<PropertyForm />} />
+                  <Route path="properties" element={<PropertyManagement />} />
+                  <Route path="properties/:id" element={<PropertyDetails />} />
+
+                  <Route path="payments" element={<PaymentTracking />} />
+
                  
                 </Route>
 
@@ -172,6 +175,8 @@ function App() {
               <Route path="payment-history" element={<PaymentHistory />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
+              
+
             </Route>
 
             {/* House Seeker Routes */}

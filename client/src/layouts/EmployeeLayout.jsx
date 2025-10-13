@@ -1,25 +1,30 @@
 // client/src/layouts/EmployeeLayout.jsx
-import React, { useState } from 'react';
-import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
+import { useNotifications } from '../context/NotificationContext';
+import Sidebar from '../components/common/Sidebar';
+import { 
   HomeIcon,
   UserGroupIcon,
   BuildingOfficeIcon,
   CurrencyDollarIcon,
   ChartBarIcon,
+  CogIcon,
+  UserIcon,
+  BellIcon,
   Bars3Icon,
-  XMarkIcon,
   ShieldExclamationIcon
 } from '@heroicons/react/24/outline';
-import Header from '../components/common/Header';
 
 const EmployeeLayout = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarItems, setSidebarItems] = useState([]);
+  const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const location = useLocation();
-  const { user } = useAuth();
 
-  // Get user permissions (default to empty object if not set)
+  // Get user permissions safely
   const permissions = user?.permissions || {
     canCreateTenants: false,
     canViewReports: false,
@@ -27,70 +32,142 @@ const EmployeeLayout = () => {
     canHandlePayments: false
   };
 
-  // Define navigation items based on permissions
-  const navigationItems = [
+  // Build sidebar items whenever permissions or location changes
+  useEffect(() => {
+    const items = [
+      {
+        name: 'Dashboard',
+        href: '/employee/dashboard',
+        icon: HomeIcon,
+        current: location.pathname === '/employee/dashboard',
+        show: true 
+      },
+      {
+        name: 'Tenant Management',
+        href: '/employee/tenants',
+        icon: UserGroupIcon,
+        current: location.pathname.startsWith('/employee/tenants'),
+        show: permissions.canCreateTenants,
+        badge: permissions.canCreateTenants ? 'Manage' : null
+      },
+      {
+        name: 'Property Management',
+        href: '/employee/properties',
+        icon: BuildingOfficeIcon,
+        current: location.pathname.startsWith('/employee/properties'),
+        show: permissions.canManageProperties,
+        badge: permissions.canManageProperties ? 'View/Edit' : null
+      },
+      {
+        name: 'Payment Processing',
+        href: '/employee/payments',
+        icon: CurrencyDollarIcon,
+        current: location.pathname.startsWith('/employee/payments'),
+        show: permissions.canHandlePayments,
+        badge: permissions.canHandlePayments ? 'Record' : null
+      },
+      {
+        name: 'Reports & Analytics',
+        href: '/employee/reports',
+        icon: ChartBarIcon,
+        current: location.pathname.startsWith('/employee/reports'),
+        show: permissions.canViewReports,
+        badge: permissions.canViewReports ? 'View Only' : null
+      }
+    ].filter(item => item.show !== false);
+
+    setSidebarItems(items);
+  }, [permissions, location.pathname]);
+
+  const userMenuItems = [
     {
-      name: 'Dashboard',
-      href: '/employee/dashboard',
-      icon: HomeIcon,
-      show: true // Always show dashboard
+      name: 'Your Profile',
+      href: '/employee/profile',
+      icon: UserIcon
     },
     {
-      name: 'Tenants',
-      href: '/employee/tenants',
-      icon: UserGroupIcon,
-      show: permissions.canCreateTenants,
-      badge: 'Manage'
-    },
-    {
-      name: 'Properties',
-      href: '/employee/properties',
-      icon: BuildingOfficeIcon,
-      show: permissions.canManageProperties,
-      badge: 'View/Edit'
-    },
-    {
-      name: 'Payments',
-      href: '/employee/payments',
-      icon: CurrencyDollarIcon,
-      show: permissions.canHandlePayments,
-      badge: 'Record'
-    },
-    {
-      name: 'Reports',
-      href: '/employee/reports',
-      icon: ChartBarIcon,
-      show: permissions.canViewReports,
-      badge: 'View Only'
+      name: 'Settings',
+      href: '/employee/settings',
+      icon: CogIcon
     }
-  ].filter(item => item.show); // Filter out items user doesn't have access to
+  ];
 
-  // Check if user has at least one permission
-  const hasAnyPermission = Object.values(permissions).some(permission => permission === true);
+  // Check if user has at least one permission (excluding dashboard)
+  const hasAnyPermission = user?.permissions && Object.values(user.permissions).some(permission => permission === true);
 
-  const isActive = (path) => {
-    return location.pathname === path || location.pathname.startsWith(path + '/');
-  };
+  // Show loading state while checking permissions
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If employee has no permissions, show access denied
   if (!hasAnyPermission) {
     return (
-      <div className="min-h-screen bg-gray-100">
-        <Header />
-        <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
-          <div className="text-center max-w-md mx-auto p-8">
-            <ShieldExclamationIcon className="h-24 w-24 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              No Permissions Assigned
-            </h2>
-            <p className="text-gray-600 mb-6">
-              You don't have any permissions assigned yet. Please contact your supervisor or administrator to grant you access.
-            </p>
-            <div className="bg-gray-50 rounded-lg p-4 text-left">
-              <p className="text-sm font-medium text-gray-700 mb-2">Your Account:</p>
-              <p className="text-sm text-gray-600">Name: {user?.firstName} {user?.lastName}</p>
-              <p className="text-sm text-gray-600">Email: {user?.email}</p>
-              <p className="text-sm text-gray-600">Role: Employee</p>
+      <div className="min-h-screen bg-gray-50">
+        {/* Top bar */}
+        <div className="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <h1 className="text-xl font-bold text-primary-600">RentalManager</h1>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-500">Employee Portal</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Access denied content */}
+        <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] py-12 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-md w-full space-y-8 text-center">
+            <div>
+              <ShieldExclamationIcon className="mx-auto h-24 w-24 text-red-500" />
+              <h2 className="mt-6 text-3xl font-bold text-gray-900">
+                Access Restricted
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                You don't have any permissions assigned to access the employee portal.
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-left">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Your Account Details</h3>
+              <dl className="space-y-3">
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Name</dt>
+                  <dd className="text-sm text-gray-900">{user?.firstName} {user?.lastName}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Email</dt>
+                  <dd className="text-sm text-gray-900">{user?.email}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Role</dt>
+                  <dd className="text-sm text-gray-900 capitalize">Employee</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Branch</dt>
+                  <dd className="text-sm text-gray-900">{user?.branch || 'Not assigned'}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Job Title</dt>
+                  <dd className="text-sm text-gray-900">{user?.jobTitle || 'Not specified'}</dd>
+                </div>
+              </dl>
+              <div className="mt-4 p-3 bg-yellow-50 rounded-md">
+                <p className="text-sm text-yellow-700">
+                  Please contact your supervisor or system administrator to request access permissions.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -99,131 +176,122 @@ const EmployeeLayout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <Header />
-
-      <div className="flex h-[calc(100vh-4rem)]">
-        {/* Mobile sidebar backdrop */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-gray-900 bg-opacity-50 z-40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
+    <div className="min-h-screen bg-gray-50">
+      {/* Mobile sidebar overlay */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div 
+            className="fixed inset-0 bg-gray-600 bg-opacity-75"
+            onClick={() => setIsSidebarOpen(false)}
           />
-        )}
+        </div>
+      )}
 
-        {/* Sidebar */}
-        <aside
-          className={`
-            fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 
-            transform transition-transform duration-300 ease-in-out lg:translate-x-0
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            mt-16 lg:mt-0
-          `}
-        >
-          <div className="h-full flex flex-col">
-            {/* Sidebar Header */}
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    {user?.firstName} {user?.lastName}
-                  </h3>
-                  <p className="text-xs text-gray-500">Employee Dashboard</p>
-                </div>
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+      {/* Sidebar */}
+      <Sidebar
+        items={sidebarItems}
+        userMenuItems={userMenuItems}
+        user={user}
+        onLogout={logout}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        title="Employee Portal"
+        roleColor="from-primary-500 to-primary-600"
+        // Add permissions info to sidebar
+        additionalInfo={
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-xs font-medium text-blue-900 mb-2">Your Permissions:</p>
+            <div className="flex flex-wrap gap-1">
+              {permissions.canCreateTenants && (
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+                  Tenants
+                </span>
+              )}
+              {permissions.canManageProperties && (
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                  Properties
+                </span>
+              )}
+              {permissions.canHandlePayments && (
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                  Payments
+                </span>
+              )}
+              {permissions.canViewReports && (
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                  Reports
+                </span>
+              )}
+            </div>
+          </div>
+        }
+      />
+
+      {/* Main content */}
+      <div className="lg:pl-64">
+        {/* Top bar */}
+        <div className="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              {/* Mobile menu button */}
+              <button
+                type="button"
+                className="lg:hidden -ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <span className="sr-only">Open sidebar</span>
+                <Bars3Icon className="h-6 w-6" />
+              </button>
+
+              {/* Page title */}
+              <div className="flex-1 min-w-0 lg:hidden">
+                <h1 className="text-lg font-semibold text-gray-900 truncate">
+                  Employee Portal
+                </h1>
+              </div>
+
+              {/* Right side items */}
+              <div className="flex items-center space-x-4">
+                {/* Notifications */}
+                <Link
+                  to="/employee/notifications"
+                  className="relative p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 rounded-full"
                 >
-                  <XMarkIcon className="h-5 w-5 text-gray-500" />
-                </button>
-              </div>
+                  <span className="sr-only">View notifications</span>
+                  <BellIcon className="h-6 w-6" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-400 text-center text-xs font-medium leading-4 text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </Link>
 
-              {/* Permission Badge */}
-              <div className="mt-3 p-2 bg-cyan-50 rounded-lg">
-                <p className="text-xs font-medium text-cyan-900 mb-1">Your Permissions:</p>
-                <div className="flex flex-wrap gap-1">
-                  {permissions.canCreateTenants && (
-                    <span className="text-xs px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded">
-                      Tenants
-                    </span>
-                  )}
-                  {permissions.canManageProperties && (
-                    <span className="text-xs px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded">
-                      Properties
-                    </span>
-                  )}
-                  {permissions.canHandlePayments && (
-                    <span className="text-xs px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded">
-                      Payments
-                    </span>
-                  )}
-                  {permissions.canViewReports && (
-                    <span className="text-xs px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded">
-                      Reports
-                    </span>
-                  )}
+                {/* User info - hidden on mobile, shown in sidebar */}
+                <div className="hidden lg:flex lg:items-center lg:space-x-3">
+                  <div className="flex-shrink-0">
+                    <div className="h-8 w-8 rounded-full bg-primary-500 flex items-center justify-center">
+                      <span className="text-sm font-medium text-white">
+                        {user?.firstName?.charAt(0) || 'E'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {user?.firstName} {user?.lastName}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {user?.jobTitle || 'Employee'} • {user?.branch || 'Main Branch'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-
-            {/* Navigation */}
-            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-              {navigationItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    className={`
-                      flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                      ${active
-                        ? 'bg-primary-50 text-primary-700'
-                        : 'text-gray-700 hover:bg-gray-50'
-                      }
-                    `}
-                    onClick={() => setSidebarOpen(false)}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Icon className={`h-5 w-5 ${active ? 'text-primary-600' : 'text-gray-400'}`} />
-                      <span>{item.name}</span>
-                    </div>
-                    {item.badge && (
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            {/* Footer Info */}
-            <div className="p-4 border-t border-gray-200 bg-gray-50">
-              <div className="text-xs text-gray-600">
-                <p className="font-medium mb-1">Access Level: Limited</p>
-                <p>Contact your supervisor to request additional permissions.</p>
-              </div>
-            </div>
           </div>
-        </aside>
+        </div>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto">
-          {/* Mobile menu button */}
-          <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-lg hover:bg-gray-100"
-            >
-              <Bars3Icon className="h-6 w-6 text-gray-700" />
-            </button>
-          </div>
-
-          {/* Page Content */}
-          <div className="p-4 sm:p-6 lg:p-8">
+        {/* Page content */}
+        <main className="py-8">
+          <div className="px-4 sm:px-6 lg:px-8">
             <Outlet />
           </div>
         </main>
