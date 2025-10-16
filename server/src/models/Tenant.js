@@ -1,3 +1,4 @@
+// server/src/models/Tenant.js (UPDATED)
 const mongoose = require('mongoose');
 
 const tenantSchema = new mongoose.Schema({
@@ -80,7 +81,18 @@ const tenantSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
-  }]
+  }],
+  // NEW FIELDS FOR EMPLOYEE TRACKING
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  agent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  }
 }, {
   timestamps: true
 });
@@ -90,6 +102,8 @@ tenantSchema.index({ user: 1 });
 tenantSchema.index({ property: 1 });
 tenantSchema.index({ status: 1 });
 tenantSchema.index({ moveInDate: -1 });
+tenantSchema.index({ createdBy: 1 }); // NEW: For employee filtering
+tenantSchema.index({ agent: 1 }); // NEW: For agent filtering
 
 const Tenant = mongoose.model('Tenant', tenantSchema);
 

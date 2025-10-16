@@ -13,17 +13,17 @@ import {
   MapIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
-import { FILTER_OPTIONS, PROPERTY_TYPES } from '../../utils/constants';
 
 const PropertySearch = () => {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savedProperties, setSavedProperties] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list' | 'map'
+  const [viewMode, setViewMode] = useState('grid');
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(12);
+  const [error, setError] = useState(null);
   
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -41,191 +41,98 @@ const PropertySearch = () => {
   const sortBy = searchParams.get('sortBy') || 'createdAt';
   const sortOrder = searchParams.get('sortOrder') || 'desc';
 
-  // Mock properties data - replace with API call
-  const mockProperties = [
-    {
-      _id: '1',
-      title: 'Modern 2BR Apartment in Westlands',
-      description: 'Beautiful modern apartment with stunning city views. Features include a spacious living room, modern kitchen, and two comfortable bedrooms.',
-      rent: 65000,
-      deposit: 130000,
-      bedrooms: 2,
-      bathrooms: 2,
-      area: 85,
-      propertyType: 'apartment',
-      location: {
-        address: 'Westlands Road, Nairobi',
-        city: 'Nairobi',
-        area: 'Westlands'
-      },
-      images: ['/api/placeholder/400/300', '/api/placeholder/400/301'],
-      features: ['parking', 'security', 'garden', 'elevator'],
-      availability: 'available',
-      featured: true,
-      agent: {
-        firstName: 'Jane',
-        lastName: 'Doe'
-      },
-      createdAt: '2024-01-15T10:30:00Z'
-    },
-    {
-      _id: '2',
-      title: 'Spacious 3BR House in Karen',
-      description: 'Family-friendly house in the serene Karen area. Perfect for families with children, featuring a large compound and modern amenities.',
-      rent: 120000,
-      deposit: 240000,
-      bedrooms: 3,
-      bathrooms: 3,
-      area: 150,
-      propertyType: 'house',
-      location: {
-        address: 'Karen Road, Nairobi',
-        city: 'Nairobi',
-        area: 'Karen'
-      },
-      images: ['/api/placeholder/400/302', '/api/placeholder/400/303'],
-      features: ['parking', 'garden', 'swimming_pool', 'security'],
-      availability: 'available',
-      featured: false,
-      agent: {
-        firstName: 'John',
-        lastName: 'Smith'
-      },
-      createdAt: '2024-01-14T15:45:00Z'
-    },
-    {
-      _id: '3',
-      title: 'Studio Apartment in Kilimani',
-      description: 'Compact and efficient studio apartment perfect for young professionals. Located in the heart of Kilimani with easy access to amenities.',
-      rent: 35000,
-      deposit: 70000,
-      bedrooms: 0,
-      bathrooms: 1,
-      area: 40,
-      propertyType: 'studio',
-      location: {
-        address: 'Kilimani Road, Nairobi',
-        city: 'Nairobi',
-        area: 'Kilimani'
-      },
-      images: ['/api/placeholder/400/304'],
-      features: ['security', 'elevator', 'internet'],
-      availability: 'available',
-      featured: false,
-      agent: {
-        firstName: 'Mary',
-        lastName: 'Johnson'
-      },
-      createdAt: '2024-01-13T09:20:00Z'
-    }
-  ];
+  // Build API query parameters
+  const buildApiParams = () => {
+    const params = new URLSearchParams();
+    
+    // Basic search parameters
+    if (searchQuery) params.set('q', searchQuery);
+    if (propertyType) params.set('propertyType', propertyType);
+    if (location) params.set('location', location);
+    
+    // Price range
+    if (minPrice) params.set('minPrice', minPrice);
+    if (maxPrice) params.set('maxPrice', maxPrice);
+    
+    // Basic filters
+    if (bedrooms) params.set('bedrooms', bedrooms);
+    if (bathrooms) params.set('bathrooms', bathrooms);
+    
+    // Features
+    if (features.length > 0) params.set('features', features.join(','));
+    
+    // Sorting
+    if (sortBy !== 'createdAt') params.set('sortBy', sortBy);
+    if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
+    
+    // Pagination
+    params.set('page', currentPage.toString());
+    params.set('limit', pageSize.toString());
+    
+    return params;
+  };
 
-  useEffect(() => {
-    fetchProperties();
-  }, [searchParams, currentPage]);
-
+  // Fetch properties from API
   const fetchProperties = async () => {
     setLoading(true);
+    setError(null);
+    
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const apiParams = buildApiParams();
+      const url = `http://localhost:5000/api/properties?${apiParams.toString()}`;
       
-      // Apply filters to mock data
-      let filteredProperties = [...mockProperties];
+      console.log('🔍 Fetching properties from:', url);
       
-      // Search query filter
-      if (searchQuery) {
-        filteredProperties = filteredProperties.filter(property =>
-          property.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          property.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          property.location.area.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-      
-      // Property type filter
-      if (propertyType) {
-        filteredProperties = filteredProperties.filter(property =>
-          property.propertyType === propertyType
-        );
-      }
-      
-      // Location filter
-      if (location) {
-        filteredProperties = filteredProperties.filter(property =>
-          property.location.city.toLowerCase() === location.toLowerCase() ||
-          property.location.area.toLowerCase() === location.toLowerCase()
-        );
-      }
-      
-      // Price range filter
-      if (minPrice) {
-        filteredProperties = filteredProperties.filter(property =>
-          property.rent >= parseInt(minPrice)
-        );
-      }
-      
-      if (maxPrice) {
-        filteredProperties = filteredProperties.filter(property =>
-          property.rent <= parseInt(maxPrice)
-        );
-      }
-      
-      // Bedrooms filter
-      if (bedrooms) {
-        const bedroomCount = parseInt(bedrooms);
-        filteredProperties = filteredProperties.filter(property =>
-          bedroomCount === 4 ? property.bedrooms >= 4 : property.bedrooms === bedroomCount
-        );
-      }
-      
-      // Features filter
-      if (features.length > 0) {
-        filteredProperties = filteredProperties.filter(property =>
-          features.every(feature => property.features.includes(feature))
-        );
-      }
-      
-      // Sorting
-      filteredProperties.sort((a, b) => {
-        let aValue, bValue;
-        
-        switch (sortBy) {
-          case 'rent':
-            aValue = a.rent;
-            bValue = b.rent;
-            break;
-          case 'createdAt':
-            aValue = new Date(a.createdAt);
-            bValue = new Date(b.createdAt);
-            break;
-          case 'bedrooms':
-            aValue = a.bedrooms;
-            bValue = b.bedrooms;
-            break;
-          case 'area':
-            aValue = a.area;
-            bValue = b.area;
-            break;
-          default:
-            aValue = new Date(a.createdAt);
-            bValue = new Date(b.createdAt);
-        }
-        
-        if (sortOrder === 'asc') {
-          return aValue > bValue ? 1 : -1;
-        } else {
-          return aValue < bValue ? 1 : -1;
-        }
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
+
+      console.log('📡 Response status:', response.status);
       
-      setProperties(filteredProperties);
-      setTotalCount(filteredProperties.length);
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use status text
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      console.log('✅ API Response:', result);
+      
+      // ✅ FIXED: Handle the correct response structure
+      // Your API returns: { status: "success", data: { properties: [], pagination: {} } }
+      if (result.status === "success") {
+        if (result.data && Array.isArray(result.data.properties)) {
+          setProperties(result.data.properties);
+          setTotalCount(result.data.pagination?.total || result.data.properties.length);
+        } else {
+          // Fallback if properties array is in different location
+          setProperties(result.data || []);
+          setTotalCount(result.data?.length || 0);
+        }
+      } else {
+        throw new Error(result.message || 'API returned unsuccessful status');
+      }
     } catch (error) {
-      console.error('Error fetching properties:', error);
+      console.error('❌ Error fetching properties:', error);
+      setError(error.message);
+      setProperties([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchProperties();
+  }, [searchParams, currentPage]);
 
   const handleSearch = (searchData) => {
     const params = new URLSearchParams();
@@ -274,16 +181,18 @@ const PropertySearch = () => {
     
     if (savedProperties.includes(propertyId)) {
       setSavedProperties(prev => prev.filter(id => id !== propertyId));
-      // Call API to remove from saved properties
     } else {
       setSavedProperties(prev => [...prev, propertyId]);
-      // Call API to save property
     }
   };
 
   const clearFilters = () => {
     setSearchParams(new URLSearchParams());
     setCurrentPage(1);
+  };
+
+  const retryFetch = () => {
+    fetchProperties();
   };
 
   const hasActiveFilters = searchQuery || propertyType || location || minPrice || maxPrice || bedrooms || bathrooms || features.length > 0;
@@ -307,7 +216,6 @@ const PropertySearch = () => {
             
             {/* View Controls */}
             <div className="flex items-center space-x-4">
-              {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-colors ${
@@ -323,7 +231,6 @@ const PropertySearch = () => {
                 )}
               </button>
               
-              {/* View Mode */}
               <div className="flex items-center border border-gray-300 rounded-lg">
                 <button
                   onClick={() => setViewMode('grid')}
@@ -337,12 +244,6 @@ const PropertySearch = () => {
                 >
                   <ViewColumnsIcon className="h-4 w-4" />
                 </button>
-                <button
-                  onClick={() => setViewMode('map')}
-                  className={`p-2 border-l border-gray-300 ${viewMode === 'map' ? 'bg-primary-50 text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                  <MapIcon className="h-4 w-4" />
-                </button>
               </div>
             </div>
           </div>
@@ -350,6 +251,33 @@ const PropertySearch = () => {
       </div>
 
       <div className="container-base py-8">
+        {/* Error Message with Retry */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <XMarkIcon className="h-5 w-5 text-red-400" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    Error loading properties
+                  </h3>
+                  <p className="text-sm text-red-700 mt-1">
+                    {error}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={retryFetch}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Filters Sidebar */}
           {showFilters && (
@@ -405,81 +333,9 @@ const PropertySearch = () => {
               </div>
             </div>
 
-            {/* Active Filters */}
-            {hasActiveFilters && (
-              <div className="flex flex-wrap items-center gap-2 mb-6 p-4 bg-gray-50 rounded-lg">
-                <span className="text-sm text-gray-600 font-medium">Active filters:</span>
-                
-                {searchQuery && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                    Search: {searchQuery}
-                    <button
-                      onClick={() => {
-                        const params = new URLSearchParams(searchParams);
-                        params.delete('q');
-                        setSearchParams(params);
-                      }}
-                      className="ml-2 text-primary-600 hover:text-primary-800"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                
-                {propertyType && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary-100 text-secondary-800">
-                    Type: {propertyType}
-                    <button
-                      onClick={() => {
-                        const params = new URLSearchParams(searchParams);
-                        params.delete('type');
-                        setSearchParams(params);
-                      }}
-                      className="ml-2 text-secondary-600 hover:text-secondary-800"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                
-                {location && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-accent-100 text-accent-800">
-                    Location: {location}
-                    <button
-                      onClick={() => {
-                        const params = new URLSearchParams(searchParams);
-                        params.delete('location');
-                        setSearchParams(params);
-                      }}
-                      className="ml-2 text-accent-600 hover:text-accent-800"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                
-                {(minPrice || maxPrice) && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    Price: {minPrice && `KES ${parseInt(minPrice).toLocaleString()}`}{minPrice && maxPrice && ' - '}{maxPrice && `KES ${parseInt(maxPrice).toLocaleString()}`}
-                    <button
-                      onClick={() => {
-                        const params = new URLSearchParams(searchParams);
-                        params.delete('minPrice');
-                        params.delete('maxPrice');
-                        setSearchParams(params);
-                      }}
-                      className="ml-2 text-purple-600 hover:text-purple-800"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-              </div>
-            )}
-
             {/* Results */}
             {loading ? (
-              <div className={viewMode === 'grid' ? 'grid-properties' : 'space-y-6'}>
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-6'}>
                 {Array.from({ length: 6 }).map((_, index) => (
                   <CardLoader key={index} />
                 ))}
@@ -494,56 +350,31 @@ const PropertySearch = () => {
                     No properties found
                   </h3>
                   <p className="text-gray-600 mb-6">
-                    Try adjusting your search criteria or filters to find more properties.
+                    {error ? 'Unable to load properties from server.' : 'Try adjusting your search criteria to find more properties.'}
                   </p>
-                  {hasActiveFilters && (
+                  {error && (
                     <button
-                      onClick={clearFilters}
-                      className="btn-primary"
+                      onClick={retryFetch}
+                      className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >
-                      Clear Filters
+                      Try Again
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <>
-                <div className={viewMode === 'grid' ? 'grid-properties' : 'space-y-6'}>
-                  {properties.map((property) => (
-                    <PropertyCard
-                      key={property._id}
-                      property={property}
-                      onSave={handleSaveProperty}
-                      isSaved={savedProperties.includes(property._id)}
-                      showSaveButton={isAuthenticated}
-                      className={viewMode === 'list' ? 'flex flex-row h-48' : ''}
-                    />
-                  ))}
-                </div>
-
-                {/* Pagination would go here */}
-                {totalCount > pageSize && (
-                  <div className="flex items-center justify-center mt-12">
-                    <nav className="flex items-center space-x-2">
-                      <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                        Previous
-                      </button>
-                      <button className="px-4 py-2 bg-primary-500 text-white rounded-lg">
-                        1
-                      </button>
-                      <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-                        2
-                      </button>
-                      <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-                        3
-                      </button>
-                      <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-                        Next
-                      </button>
-                    </nav>
-                  </div>
-                )}
-              </>
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-6'}>
+                {properties.map((property) => (
+                  <PropertyCard
+                    key={property._id}
+                    property={property}
+                    onSave={handleSaveProperty}
+                    isSaved={savedProperties.includes(property._id)}
+                    showSaveButton={isAuthenticated}
+                    className={viewMode === 'list' ? 'flex flex-row h-48' : ''}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </div>

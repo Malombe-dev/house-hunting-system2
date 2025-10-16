@@ -65,6 +65,7 @@ import Applications from './pages/seeker/Applications';
 import Profile from './pages/shared/Profile';
 import Settings from './pages/shared/Settings';
 import NotFound from './pages/shared/NotFound';
+import CreatePropertyForm from './components/forms/CreatePropertyForm';
 
 function App() {
   return (
@@ -130,7 +131,7 @@ function App() {
               <Route path="analytics" element={<AgentAnalytics />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="properties/new" element={<PropertyForm />} />
+              <Route path="properties/new" element={<CreatePropertyForm />} />
               <Route path="properties" element={<PropertyManagement />} />
 
             </Route>
@@ -149,10 +150,9 @@ function App() {
                   <Route path="profile" element={<Profile />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="tenants" element={<TenantManagement />} />
-                  <Route path="properties/new" element={<PropertyForm />} />
+                  <Route path="properties/new" element={<CreatePropertyForm />} />
                   <Route path="properties" element={<PropertyManagement />} />
                   <Route path="properties/:id" element={<PropertyDetails />} />
-
                   <Route path="payments" element={<PaymentTracking />} />
 
                  
