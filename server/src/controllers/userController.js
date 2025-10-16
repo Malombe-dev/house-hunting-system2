@@ -545,6 +545,142 @@ exports.updateUserRole = async (req, res) => {
 };
 
 /**
+ * @desc    Update user (Admin can update any user, Agent can update their employees)
+ * @route   PUT /api/users/:id
+ * @access  Private/Admin/Agent
+ */
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      jobTitle,
+      branch,
+      salary,
+      address,
+      city,
+      state,
+      country,
+      permissions,
+      isActive
+    } = req.body;
+
+    // Find user
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Authorization check
+    // Admin can update any user
+    // Agent can only update their own employees
+    if (req.user.role === 'agent') {
+      // Check if the user being updated is an employee created by this agent
+      if (user.role !== 'employee' || user.createdBy.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to update this user'
+        });
+      }
+    }
+
+    // Landlord can only update their own employees
+    if (req.user.role === 'landlord') {
+      if (user.role !== 'employee' || user.createdBy.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to update this user'
+        });
+      }
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser && existingUser._id.toString() !== id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists'
+        });
+      }
+      user.email = email;
+    }
+
+    // Update allowed fields based on user role
+    const allowedUpdates = {};
+    
+    // Basic info that agents/admins can update
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (phone) user.phone = phone;
+    
+    // Employee-specific fields (only for employees and by their creators)
+    if (user.role === 'employee') {
+      if (jobTitle !== undefined) user.jobTitle = jobTitle;
+      if (branch !== undefined) user.branch = branch;
+      if (salary !== undefined) user.salary = salary;
+      if (permissions) user.permissions = { ...user.permissions, ...permissions };
+    }
+
+    // Additional fields that only admin can update
+    if (req.user.role === 'admin') {
+      if (address !== undefined) user.address = address;
+      if (city !== undefined) user.city = city;
+      if (state !== undefined) user.state = state;
+      if (country !== undefined) user.country = country;
+      
+      // Only admin can activate/deactivate users
+      if (isActive !== undefined) user.isActive = isActive;
+    }
+
+    // Save updated user
+    await user.save();
+
+    // Return updated user without password
+    const updatedUser = await User.findById(id)
+      .select('-password')
+      .populate('createdBy', 'firstName lastName email');
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors
+      });
+    }
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already exists'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user',
+      error: error.message
+    });
+  }
+};
+/**
  * @desc    Delete user
  * @route   DELETE /api/users/:id
  * @access  Private/Admin

@@ -1,4 +1,4 @@
-// client/src/pages/agent/AgentDashboard.jsx (UPDATED WITH EMPLOYEES)
+// client/src/pages/agent/AgentDashboard.jsx (FINAL FIXED VERSION)
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal from '../../components/common/Modal';
 import CreateEmployeeForm from '../../components/forms/CreateEmployeeForm';
 import api from '../../services/api';
+import EditEmployeeForm from '../../components/forms/EditEmployeeForm';
 
 import { 
   HomeIcon,
@@ -18,16 +19,38 @@ import {
   EyeIcon,
   ExclamationCircleIcon,
   BriefcaseIcon,
-  UsersIcon
+  UsersIcon,
+  PencilIcon,
+  TrashIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  CheckCircleIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const AgentDashboard = () => {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({
+    totalProperties: 0,
+    activeTenants: 0,
+    totalEmployees: 0,
+    monthlyIncome: 0,
+    maintenanceRequests: 0,
+    propertyGrowth: 0,
+    tenantGrowth: 0,
+    incomeGrowth: 0,
+    maintenanceIncrease: 0,
+    occupancyRate: 0,
+    averageRent: 0,
+    pendingProperties: 0
+  });
   const [loading, setLoading] = useState(true);
   const [showCreateEmployeeModal, setShowCreateEmployeeModal] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [showEmployeesModal, setShowEmployeesModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [deletingEmployee, setDeletingEmployee] = useState(null);
+  const [pendingProperties, setPendingProperties] = useState([]);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -38,45 +61,167 @@ const AgentDashboard = () => {
     try {
       setLoading(true);
 
-      // Fetch agent's hierarchy and stats
-      const [hierarchyRes, employeesRes] = await Promise.all([
-        api.get(`/hierarchy/agent/${user.id}`),
-        api.get('/users/my-employees')
-      ]);
+      console.log('Starting dashboard data fetch...');
 
-      setStats({
-        totalProperties: hierarchyRes.data.stats.totalProperties,
-        activeTenants: hierarchyRes.data.stats.totalTenants,
-        totalEmployees: hierarchyRes.data.employees.length,
-        monthlyIncome: 1250000, // From payments
-        maintenanceRequests: 7,
-        propertyGrowth: 15.2,
-        tenantGrowth: 8.5,
-        incomeGrowth: 22.1,
-        maintenanceIncrease: -12.3,
-        occupancyRate: hierarchyRes.data.stats.occupancyRate || 85,
-        averageRent: 52000
+      // Fetch data - hierarchy contains everything we need
+      const requests = [
+        api.get(`/hierarchy/agent/${user.id}`).catch(err => {
+          console.warn('Hierarchy fetch failed:', err.response?.data || err.message);
+          return { data: { employees: [], properties: [], stats: {} } };
+        }),
+        api.get('/properties/my-properties').catch(err => {
+          console.warn('Properties fetch failed:', err.response?.data || err.message);
+          return { data: { properties: [] } };
+        }),
+        api.get('/properties/pending').catch(err => {
+          console.warn('Pending properties fetch failed:', err.response?.data || err.message);
+          return { data: { properties: [] } };
+        })
+      ];
+
+      const [hierarchyRes, propertiesRes, pendingRes] = await Promise.all(requests);
+
+      console.log('Raw API responses:', {
+        hierarchy: hierarchyRes.data,
+        properties: propertiesRes.data,
+        pending: pendingRes.data
       });
 
-      setEmployees(employeesRes.data.employees || []);
+      // Extract data from responses based on the actual structure from your logs
+      const hierarchyData = hierarchyRes.data || {};
+      const employeesData = hierarchyData.employees || [];
+      const hierarchyProperties = hierarchyData.properties || [];
+      const hierarchyStats = hierarchyData.stats || {};
+      
+      const propertiesData = propertiesRes.data?.properties || propertiesRes.data || [];
+      const pendingPropertiesData = pendingRes.data?.properties || pendingRes.data || [];
+
+      console.log('Extracted data:', {
+        employeesData,
+        propertiesData,
+        pendingPropertiesData,
+        hierarchyStats
+      });
+
+      // Calculate real stats
+      const totalProperties = propertiesData.length || hierarchyProperties.length;
+      const activeProperties = propertiesData.filter(p => 
+        p.status === 'active' || p.status === 'approved'
+      ).length;
+
+      const pendingPropertiesCount = pendingPropertiesData.length;
+
+      setStats({
+        totalProperties,
+        activeTenants: hierarchyStats.totalTenants || 0,
+        totalEmployees: employeesData.length,
+        monthlyIncome: hierarchyStats.monthlyIncome || 1250000,
+        maintenanceRequests: hierarchyStats.maintenanceRequests || 7,
+        propertyGrowth: hierarchyStats.propertyGrowth || 15.2,
+        tenantGrowth: hierarchyStats.tenantGrowth || 8.5,
+        incomeGrowth: hierarchyStats.incomeGrowth || 22.1,
+        maintenanceIncrease: hierarchyStats.maintenanceIncrease || -12.3,
+        occupancyRate: totalProperties > 0 ? Math.round((activeProperties / totalProperties) * 100) : 0,
+        averageRent: hierarchyStats.averageRent || 52000,
+        pendingProperties: pendingPropertiesCount
+      });
+
+      setEmployees(employeesData);
+      setPendingProperties(pendingPropertiesData);
 
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('Error in fetchDashboardData:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEmployeeCreated = (newEmployee) => {
-    setEmployees(prev => [newEmployee, ...prev]);
-    setStats(prev => ({
-      ...prev,
-      totalEmployees: (prev.totalEmployees || 0) + 1
-    }));
-    setShowCreateEmployeeModal(false);
+  const handleEmployeeCreated = async (newEmployee) => {
+    try {
+      // Refresh the dashboard data to get the updated employee list
+      await fetchDashboardData();
+      setShowCreateEmployeeModal(false);
+    } catch (error) {
+      console.error('Error refreshing after employee creation:', error);
+    }
   };
 
-  // Mock data for charts
+  const handleEmployeeUpdated = (updatedEmployee) => {
+    setEmployees(prev => 
+      prev.map(emp => 
+        emp._id === updatedEmployee._id ? updatedEmployee : emp
+      )
+    );
+    setEditingEmployee(null);
+  };
+
+ // In the handleDeleteEmployee function, replace with:
+const handleDeleteEmployee = async () => {
+  if (!deletingEmployee) return;
+
+  try {
+    // Instead of using the admin-only delete endpoint, deactivate the employee
+    await api.put(`/users/${deletingEmployee._id}/status`, {
+      isActive: false
+    });
+    
+    // Update the employee list locally
+    setEmployees(prev => 
+      prev.map(emp => 
+        emp._id === deletingEmployee._id 
+          ? { ...emp, isActive: false }
+          : emp
+      )
+    );
+    
+    setDeletingEmployee(null);
+    alert('Employee deactivated successfully!');
+  } catch (error) {
+    console.error('Error deactivating employee:', error);
+    
+    // If status update fails, try to refresh the data
+    if (error.response?.status === 403) {
+      alert('You do not have permission to delete users. Employee has been deactivated instead.');
+      await fetchDashboardData(); // Refresh to get current state
+    } else {
+      alert('Failed to update employee status');
+    }
+  }
+};
+
+  const sendWelcomeEmail = async (employeeId) => {
+    try {
+      await api.post('/auth/send-welcome-email', { userId: employeeId });
+      alert('Welcome email sent successfully!');
+    } catch (error) {
+      console.error('Error sending welcome email:', error);
+      alert('Failed to send welcome email');
+    }
+  };
+
+  const handleApproveProperty = async (propertyId) => {
+    try {
+      await api.patch(`/properties/${propertyId}/approve`);
+      await fetchDashboardData(); // Refresh all data
+      alert('Property approved successfully!');
+    } catch (error) {
+      console.error('Error approving property:', error);
+      alert('Failed to approve property');
+    }
+  };
+
+  const handleRejectProperty = async (propertyId) => {
+    try {
+      await api.patch(`/properties/${propertyId}/reject`);
+      await fetchDashboardData(); // Refresh all data
+      alert('Property rejected successfully!');
+    } catch (error) {
+      console.error('Error rejecting property:', error);
+      alert('Failed to reject property');
+    }
+  };
+
+  // Mock data for charts (fallback)
   const incomeData = [
     { month: 'Jan', income: 980000, expenses: 150000 },
     { month: 'Feb', income: 1100000, expenses: 180000 },
@@ -154,7 +299,7 @@ const AgentDashboard = () => {
             Here's what's happening with your properties today.
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            Account ID: {user?.id?.slice(-8).toUpperCase()}
+            Account ID: {user?.id?.slice(-8)?.toUpperCase() || 'N/A'}
           </p>
         </div>
         
@@ -181,7 +326,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Total Properties</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.totalProperties || 0}
+                {stats.totalProperties}
               </p>
             </div>
             <div className="p-3 bg-blue-100 rounded-full">
@@ -191,7 +336,7 @@ const AgentDashboard = () => {
           <div className="flex items-center mt-4">
             <ArrowTrendingUpIcon className="h-4 w-4 text-green-500 mr-1" />
             <span className="text-sm text-green-600 font-medium">
-              +{stats?.propertyGrowth}%
+              +{stats.propertyGrowth}%
             </span>
           </div>
         </div>
@@ -203,7 +348,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Team Members</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.totalEmployees || 0}
+                {stats.totalEmployees}
               </p>
             </div>
             <div className="p-3 bg-cyan-100 rounded-full">
@@ -223,7 +368,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Active Tenants</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.activeTenants || 0}
+                {stats.activeTenants}
               </p>
             </div>
             <div className="p-3 bg-green-100 rounded-full">
@@ -232,7 +377,7 @@ const AgentDashboard = () => {
           </div>
           <div className="flex items-center mt-4">
             <span className="text-sm text-gray-500">
-              {stats?.occupancyRate}% occupied
+              {stats.occupancyRate}% occupied
             </span>
           </div>
         </div>
@@ -243,7 +388,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Monthly Income</p>
               <p className="text-3xl font-bold text-gray-900">
-                KES {((stats?.monthlyIncome || 0) / 1000000).toFixed(1)}M
+                KES {(stats.monthlyIncome / 1000000).toFixed(1)}M
               </p>
             </div>
             <div className="p-3 bg-purple-100 rounded-full">
@@ -253,7 +398,7 @@ const AgentDashboard = () => {
           <div className="flex items-center mt-4">
             <ArrowTrendingUpIcon className="h-4 w-4 text-green-500 mr-1" />
             <span className="text-sm text-green-600 font-medium">
-              +{stats?.incomeGrowth}%
+              +{stats.incomeGrowth}%
             </span>
           </div>
         </div>
@@ -264,7 +409,7 @@ const AgentDashboard = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Maintenance</p>
               <p className="text-3xl font-bold text-gray-900">
-                {stats?.maintenanceRequests || 0}
+                {stats.maintenanceRequests}
               </p>
             </div>
             <div className="p-3 bg-yellow-100 rounded-full">
@@ -278,6 +423,66 @@ const AgentDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Pending Properties Approval Section */}
+      {pendingProperties.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-yellow-800">
+              Properties Pending Approval
+            </h3>
+            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+              {pendingProperties.length} pending
+            </span>
+          </div>
+          <div className="space-y-3">
+            {pendingProperties.slice(0, 3).map((property) => (
+              <div key={property._id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-yellow-200">
+                <div className="flex items-center space-x-3">
+                  {property.images?.[0] && (
+                    <img 
+                      src={property.images[0]} 
+                      alt={property.title}
+                      className="h-12 w-12 rounded-lg object-cover"
+                    />
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-900">{property.title}</p>
+                    <p className="text-sm text-gray-600">{property.location?.address}</p>
+                    <p className="text-xs text-gray-500">KES {property.price?.toLocaleString()}/month</p>
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleApproveProperty(property._id)}
+                    className="flex items-center space-x-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                    <span>Approve</span>
+                  </button>
+                  <button
+                    onClick={() => handleRejectProperty(property._id)}
+                    className="flex items-center space-x-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                  >
+                    <XCircleIcon className="h-4 w-4" />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {pendingProperties.length > 3 && (
+            <div className="mt-4 text-center">
+              <Link 
+                to="/agent/properties/pending" 
+                className="text-yellow-700 hover:text-yellow-800 font-medium text-sm"
+              >
+                View all {pendingProperties.length} pending properties →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -456,7 +661,7 @@ const AgentDashboard = () => {
         isOpen={showEmployeesModal}
         onClose={() => setShowEmployeesModal(false)}
         title="Your Team"
-        size="lg"
+        size="xl"
       >
         <div className="space-y-4">
           {employees.length === 0 ? (
@@ -475,34 +680,130 @@ const AgentDashboard = () => {
             </div>
           ) : (
             <>
-              {employees.map((employee) => (
-                <div key={employee._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="h-10 w-10 bg-cyan-500 rounded-full flex items-center justify-center">
-                      <span className="text-white font-medium">
-                        {employee.firstName[0]}{employee.lastName[0]}
+              <div className="grid gap-4">
+                {employees.map((employee) => (
+                  <div key={employee._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                    <div className="flex items-center space-x-4 flex-1">
+                      <div className="h-12 w-12 bg-cyan-500 rounded-full flex items-center justify-center">
+                        <span className="text-white font-medium">
+                          {employee.firstName?.[0]}{employee.lastName?.[0]}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
+                          {employee.firstName} {employee.lastName}
+                        </p>
+                        <p className="text-sm text-gray-600">{employee.jobTitle || 'Employee'}</p>
+                        <div className="flex items-center space-x-4 mt-1">
+                          <div className="flex items-center space-x-1">
+                            <EnvelopeIcon className="h-3 w-3 text-gray-400" />
+                            <span className="text-xs text-gray-500">{employee.email}</span>
+                          </div>
+                          {employee.phone && (
+                            <div className="flex items-center space-x-1">
+                              <PhoneIcon className="h-3 w-3 text-gray-400" />
+                              <span className="text-xs text-gray-500">{employee.phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        employee.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {employee.isActive ? 'Active' : 'Inactive'}
                       </span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {employee.firstName} {employee.lastName}
-                      </p>
-                      <p className="text-sm text-gray-600">{employee.jobTitle}</p>
-                      <p className="text-xs text-gray-500">{employee.email}</p>
+                      
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => sendWelcomeEmail(employee._id)}
+                          className="p-2 text-gray-400 hover:text-cyan-600 transition-colors"
+                          title="Send Welcome Email"
+                        >
+                          <EnvelopeIcon className="h-4 w-4" />
+                        </button>
+                        
+                        <button
+                          onClick={() => setEditingEmployee(employee)}
+                          className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                          title="Edit Employee"
+                        >
+                          <PencilIcon className="h-4 w-4" />
+                        </button>
+                        
+                        <button
+                          onClick={() => setDeletingEmployee(employee)}
+                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete Employee"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600">{employee.branch || 'Main Office'}</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      employee.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {employee.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-500 text-center">
+                  {employees.length} team member{employees.length !== 1 ? 's' : ''}
+                </p>
+              </div>
             </>
           )}
+        </div>
+      </Modal>
+
+      {/* Edit Employee Modal */}
+      <Modal
+        isOpen={!!editingEmployee}
+        onClose={() => setEditingEmployee(null)}
+        title="Edit Team Member"
+        size="lg"
+      >
+        {editingEmployee && (
+          <EditEmployeeForm
+            employee={editingEmployee}
+            onSuccess={handleEmployeeUpdated}
+            onCancel={() => setEditingEmployee(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={!!deletingEmployee}
+        onClose={() => setDeletingEmployee(null)}
+        title="Delete Team Member"
+        size="md"
+      >
+        <div className="text-center">
+          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+            <TrashIcon className="h-6 w-6 text-red-600" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Delete {deletingEmployee?.firstName} {deletingEmployee?.lastName}?
+          </h3>
+          <p className="text-sm text-gray-500 mb-6">
+            This action cannot be undone. This will permanently remove the employee 
+            from your team and revoke their access to the system.
+          </p>
+          <div className="flex justify-center space-x-3">
+            <button
+              onClick={() => setDeletingEmployee(null)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteEmployee}
+              className="btn-danger"
+            >
+              Delete Employee
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

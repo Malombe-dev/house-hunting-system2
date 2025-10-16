@@ -10,6 +10,7 @@ import PropertyForm from './components/forms/PropertyForm';
 import CreateAgentForm from './components/forms/CreateAgentForm';
 import CreateEmployeeForm from './components/forms/CreateEmployeeForm';
 import CreateTenantForm from './components/forms/CreateTenantForm';
+import EditProperty from './components/forms/EditPropertyForm';
 
 // Layout Components
 import PublicLayout from './layouts/PublicLayout';
@@ -50,6 +51,9 @@ import AgentAnalytics from './pages/agent/AgentAnalytics';
 
 //employee pages 
 import EmployeeDashboard from './pages/employee/EmployeeDashboard';
+import EmployeeCreateProperty from './pages/employee/EmployeeCreateProperty';
+import EmployeePropertyList from './pages/employee/EmployeePropertyList';
+import EmployeePropertyView from './pages/employee/EmployeePropertyView';
 // Tenant Pages
 import TenantDashboard from './pages/tenant/TenantDashboard';
 import RentPayments from './pages/tenant/RentPayments';
@@ -133,6 +137,7 @@ function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="properties/new" element={<CreatePropertyForm />} />
               <Route path="properties" element={<PropertyManagement />} />
+              <Route path="properties/:id/edit" element={<EditProperty/>} />
 
             </Route>
                           
@@ -150,10 +155,17 @@ function App() {
                   <Route path="profile" element={<Profile />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="tenants" element={<TenantManagement />} />
-                  <Route path="properties/new" element={<CreatePropertyForm />} />
-                  <Route path="properties" element={<PropertyManagement />} />
+                  
+                 
                   <Route path="properties/:id" element={<PropertyDetails />} />
                   <Route path="payments" element={<PaymentTracking />} />
+
+                  <Route path="properties">
+                    <Route index element={<EmployeePropertyList />} />
+                    <Route path="new" element={<EmployeeCreateProperty />} />
+                    <Route path=":id" element={<EmployeePropertyView />} />
+                  
+                  </Route>
 
                  
                 </Route>

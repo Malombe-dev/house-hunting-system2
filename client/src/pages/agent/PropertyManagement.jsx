@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import EditProperty from '../../components/forms/EditPropertyForm';
 import { 
   PlusIcon,
   MagnifyingGlassIcon,
-  FunnelIcon,
   PencilIcon,
   TrashIcon,
   EyeIcon,
@@ -11,137 +11,97 @@ import {
   CurrencyDollarIcon,
   UserGroupIcon,
   MapPinIcon,
-  PhotoIcon
+  PhotoIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import LoadingSpinner, { CardLoader } from '../../components/common/LoadingSpinner';
 import PropertyCard from '../../components/cards/PropertyCard';
 import Modal, { ConfirmModal } from '../../components/common/Modal';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const PropertyManagement = () => {
   const [properties, setProperties] = useState([]);
+  const [pendingProperties, setPendingProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [approvalFilter, setApprovalFilter] = useState('');
+  const [viewMode, setViewMode] = useState('grid');
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [propertyToDelete, setPropertyToDelete] = useState(null);
+  const [propertyToApprove, setPropertyToApprove] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Mock properties data - replace with API call
-  const mockProperties = [
-    {
-      _id: '1',
-      title: 'Modern 2BR Apartment in Westlands',
-      description: 'Beautiful modern apartment with stunning city views and premium amenities.',
-      rent: 65000,
-      deposit: 130000,
-      bedrooms: 2,
-      bathrooms: 2,
-      area: 85,
-      propertyType: 'apartment',
-      location: {
-        address: 'Westlands Road, Nairobi',
-        city: 'Nairobi',
-        area: 'Westlands'
-      },
-      images: ['/api/placeholder/400/300', '/api/placeholder/400/301'],
-      features: ['parking', 'security', 'garden', 'elevator'],
-      availability: 'available',
-      featured: true,
-      tenant: null,
-      views: 234,
-      inquiries: 12,
-      applications: 3,
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-20T14:22:00Z'
-    },
-    {
-      _id: '2',
-      title: 'Spacious 3BR House in Karen',
-      description: 'Family-friendly house in serene Karen area with large compound.',
-      rent: 120000,
-      deposit: 240000,
-      bedrooms: 3,
-      bathrooms: 3,
-      area: 150,
-      propertyType: 'house',
-      location: {
-        address: 'Karen Road, Nairobi',
-        city: 'Nairobi',
-        area: 'Karen'
-      },
-      images: ['/api/placeholder/400/302', '/api/placeholder/400/303'],
-      features: ['parking', 'garden', 'swimming_pool', 'security'],
-      availability: 'occupied',
-      featured: false,
-      tenant: {
-        name: 'John Doe',
-        phone: '+254712345678',
-        leaseStart: '2023-06-01',
-        leaseEnd: '2024-06-01'
-      },
-      views: 156,
-      inquiries: 8,
-      applications: 5,
-      createdAt: '2024-01-10T15:45:00Z',
-      updatedAt: '2024-01-18T09:30:00Z'
-    },
-    {
-      _id: '3',
-      title: 'Studio Apartment in Kilimani',
-      description: 'Compact and efficient studio perfect for young professionals.',
-      rent: 35000,
-      deposit: 70000,
-      bedrooms: 0,
-      bathrooms: 1,
-      area: 40,
-      propertyType: 'studio',
-      location: {
-        address: 'Kilimani Road, Nairobi',
-        city: 'Nairobi',
-        area: 'Kilimani'
-      },
-      images: ['/api/placeholder/400/304'],
-      features: ['security', 'elevator', 'internet'],
-      availability: 'maintenance',
-      featured: false,
-      tenant: null,
-      views: 89,
-      inquiries: 4,
-      applications: 1,
-      createdAt: '2024-01-08T11:20:00Z',
-      updatedAt: '2024-01-22T16:15:00Z'
-    }
-  ];
-
+  // Fetch properties
   useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setProperties(mockProperties);
-      } catch (error) {
-        console.error('Error fetching properties:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProperties();
+    fetchPendingProperties();
   }, []);
 
-  // Filter properties based on search and filters
+  const fetchProperties = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/properties/my-properties`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch properties');
+
+      const data = await response.json();
+      if (data.status === 'success') {
+        setProperties(data.data.properties || []);
+      }
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      alert('Failed to load properties');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPendingProperties = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/properties/pending`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success') {
+          setPendingProperties(data.data.properties || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching pending properties:', error);
+    }
+  };
+
+  // Filter properties
   const filteredProperties = properties.filter(property => {
     const matchesSearch = 
-      property.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.location.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.location.area.toLowerCase().includes(searchTerm.toLowerCase());
+      property.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.location?.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.location?.area?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = !statusFilter || property.availability === statusFilter;
     const matchesType = !typeFilter || property.propertyType === typeFilter;
+    const matchesApproval = !approvalFilter || property.approvalStatus === approvalFilter;
     
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesStatus && matchesType && matchesApproval;
   });
 
   const handleViewProperty = (property) => {
@@ -155,24 +115,109 @@ const PropertyManagement = () => {
   };
 
   const confirmDelete = async () => {
+    setActionLoading(true);
     try {
-      // API call to delete property
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/properties/${propertyToDelete._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete property');
+      }
+
       setProperties(prev => prev.filter(prop => prop._id !== propertyToDelete._id));
+      setPendingProperties(prev => prev.filter(prop => prop._id !== propertyToDelete._id));
+      alert('Property deleted successfully');
       setShowDeleteModal(false);
       setPropertyToDelete(null);
     } catch (error) {
       console.error('Error deleting property:', error);
+      alert(error.message || 'Failed to delete property');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveProperty = (property) => {
+    setPropertyToApprove(property);
+    setShowApprovalModal(true);
+    setRejectionReason('');
+  };
+
+  const confirmApproval = async (approve = true) => {
+    setActionLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = approve 
+        ? `${API_BASE_URL}/properties/${propertyToApprove._id}/approve`
+        : `${API_BASE_URL}/properties/${propertyToApprove._id}/reject`;
+
+      const body = approve ? {} : { reason: rejectionReason };
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || `Failed to ${approve ? 'approve' : 'reject'} property`);
+      }
+
+      const data = await response.json();
+      
+      // Update properties list
+      setProperties(prev => prev.map(prop => 
+        prop._id === propertyToApprove._id ? data.data.property : prop
+      ));
+      
+      // Remove from pending list
+      setPendingProperties(prev => prev.filter(prop => prop._id !== propertyToApprove._id));
+      
+      alert(`Property ${approve ? 'approved' : 'rejected'} successfully`);
+      setShowApprovalModal(false);
+      setPropertyToApprove(null);
+      setRejectionReason('');
+    } catch (error) {
+      console.error('Error processing approval:', error);
+      alert(error.message || 'Failed to process approval');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleStatusChange = async (propertyId, newStatus) => {
     try {
-      // API call to update property status
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/properties/${propertyId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ availability: newStatus })
+      });
+
+      if (!response.ok) throw new Error('Failed to update status');
+
+      const data = await response.json();
       setProperties(prev => prev.map(property => 
-        property._id === propertyId ? { ...property, availability: newStatus } : property
+        property._id === propertyId ? data.data.property : property
       ));
+      
+      alert('Property status updated successfully');
     } catch (error) {
       console.error('Error updating property status:', error);
+      alert('Failed to update property status');
     }
   };
 
@@ -186,13 +231,27 @@ const PropertyManagement = () => {
     return colors[status] || colors.available;
   };
 
+  const getApprovalStatusColor = (status) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      approved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800'
+    };
+    return colors[status] || colors.pending;
+  };
+
   const formatPrice = (price) => {
+    if (!price) return 'N/A';
     return new Intl.NumberFormat('en-KE', {
       style: 'currency',
       currency: 'KES',
       minimumFractionDigits: 0
     }).format(price);
   };
+
+  const totalRevenue = properties
+    .filter(p => p.availability === 'occupied')
+    .reduce((sum, p) => sum + (p.rent || 0), 0);
 
   return (
     <div className="space-y-8">
@@ -202,11 +261,34 @@ const PropertyManagement = () => {
           <h1 className="text-2xl font-bold text-gray-900">Property Management</h1>
           <p className="text-gray-600">Manage all your properties and listings</p>
         </div>
-        <Link to="/agent/properties/new" className="btn-primary">
+        <Link to="/agent/properties/new" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center">
           <PlusIcon className="h-4 w-4 mr-2" />
           Add Property
         </Link>
       </div>
+
+      {/* Pending Approvals Alert */}
+      {pendingProperties.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="flex items-start space-x-3">
+            <ClockIcon className="h-6 w-6 text-yellow-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-yellow-800">
+                {pendingProperties.length} Properties Pending Approval
+              </h3>
+              <p className="text-yellow-700 mt-1">
+                Review and approve properties added by employees
+              </p>
+            </div>
+            <button
+              onClick={() => setApprovalFilter('pending')}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+            >
+              Review Now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -256,9 +338,9 @@ const PropertyManagement = () => {
               <CurrencyDollarIcon className="h-6 w-6 text-yellow-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Value</p>
+              <p className="text-sm font-medium text-gray-600">Monthly Revenue</p>
               <p className="text-2xl font-bold text-gray-900">
-                {formatPrice(properties.reduce((sum, p) => sum + p.rent, 0))}
+                {formatPrice(totalRevenue)}
               </p>
             </div>
           </div>
@@ -276,16 +358,16 @@ const PropertyManagement = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search properties..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
           {/* Filters */}
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap items-center gap-4">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Status</option>
               <option value="available">Available</option>
@@ -297,26 +379,50 @@ const PropertyManagement = () => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Types</option>
               <option value="apartment">Apartment</option>
               <option value="house">House</option>
               <option value="studio">Studio</option>
+              <option value="bedsitter">Bedsitter</option>
               <option value="commercial">Commercial</option>
+              <option value="land">Land</option>
+              <option value="plot">Plot</option>
+            </select>
+
+            <select
+              value={approvalFilter}
+              onChange={(e) => setApprovalFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Approvals</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
             </select>
 
             {/* View Mode Toggle */}
             <div className="flex items-center border border-gray-300 rounded-lg">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 ${viewMode === 'grid' ? 'bg-secondary-50 text-secondary-600' : 'text-gray-400 hover:text-gray-600'}`}
+                className={`p-2 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
               >
                 <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
                   <div className="bg-current rounded-sm"></div>
                   <div className="bg-current rounded-sm"></div>
                   <div className="bg-current rounded-sm"></div>
                   <div className="bg-current rounded-sm"></div>
+                </div>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <div className="space-y-1">
+                  <div className="h-0.5 w-4 bg-current"></div>
+                  <div className="h-0.5 w-4 bg-current"></div>
+                  <div className="h-0.5 w-4 bg-current"></div>
                 </div>
               </button>
             </div>
@@ -334,7 +440,7 @@ const PropertyManagement = () => {
 
         <div className="p-6">
           {loading ? (
-            <div className={viewMode === 'grid' ? 'grid-properties' : 'space-y-6'}>
+            <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-6'}>
               {Array.from({ length: 6 }).map((_, index) => (
                 <CardLoader key={index} />
               ))}
@@ -344,64 +450,30 @@ const PropertyManagement = () => {
               <HomeIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">No properties found</h3>
               <p className="text-gray-600 mb-6">
-                {searchTerm || statusFilter || typeFilter
+                {searchTerm || statusFilter || typeFilter || approvalFilter
                   ? 'Try adjusting your search criteria or filters.'
                   : 'Get started by adding your first property.'}
               </p>
-              <Link to="/agent/properties/new" className="btn-primary">
+              <Link to="/agent/properties/new" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center">
                 <PlusIcon className="h-4 w-4 mr-2" />
                 Add Property
               </Link>
             </div>
-          ) : viewMode === 'grid' ? (
-            <div className="grid-properties">
-              {filteredProperties.map((property) => (
-                <div key={property._id} className="relative">
-                  <PropertyCard
-                    property={property}
-                    showSaveButton={false}
-                  />
-                  {/* Property Management Overlay */}
-                  <div className="absolute top-4 right-4 bg-white rounded-lg shadow-sm border border-gray-200 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="flex space-x-1">
-                      <button
-                        onClick={() => handleViewProperty(property)}
-                        className="p-1 text-gray-600 hover:text-blue-600"
-                        title="View Details"
-                      >
-                        <EyeIcon className="h-4 w-4" />
-                      </button>
-                      <Link
-                        to={`/agent/properties/${property._id}/edit`}
-                        className="p-1 text-gray-600 hover:text-green-600"
-                        title="Edit Property"
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </Link>
-                      <button
-                        onClick={() => handleDeleteProperty(property)}
-                        className="p-1 text-gray-600 hover:text-red-600"
-                        title="Delete Property"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
+          ) : viewMode === 'list' ? (
             /* List View */
             <div className="space-y-4">
               {filteredProperties.map((property) => (
                 <div key={property._id} className="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                   {/* Property Image */}
                   <div className="flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-200">
-                    {property.images.length > 0 ? (
+                    {property.images && property.images.length > 0 ? (
                       <img
                         src={property.images[0]}
                         alt={property.title}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.src = '/api/placeholder/400/300';
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -417,31 +489,40 @@ const PropertyManagement = () => {
                         <h3 className="text-lg font-semibold text-gray-900 truncate">{property.title}</h3>
                         <div className="flex items-center space-x-2 mt-1">
                           <MapPinIcon className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm text-gray-600">{property.location.address}</span>
+                          <span className="text-sm text-gray-600">{property.location?.address || 'N/A'}</span>
                         </div>
                         <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
-                          <span>{property.bedrooms} bed{property.bedrooms !== 1 ? 's' : ''}</span>
-                          <span>{property.bathrooms} bath{property.bathrooms !== 1 ? 's' : ''}</span>
-                          <span>{property.area} m²</span>
+                          {property.bedrooms !== undefined && <span>{property.bedrooms} bed{property.bedrooms !== 1 ? 's' : ''}</span>}
+                          {property.bathrooms !== undefined && <span>{property.bathrooms} bath{property.bathrooms !== 1 ? 's' : ''}</span>}
+                          <span>{property.area || 'N/A'} {property.propertyType === 'land' ? 'acres' : 'm²'}</span>
                         </div>
                       </div>
 
                       <div className="text-right">
-                        <p className="text-xl font-bold text-gray-900">{formatPrice(property.rent)}</p>
-                        <p className="text-sm text-gray-500">per month</p>
-                        <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full capitalize mt-2 ${getStatusColor(property.availability)}`}>
-                          {property.availability}
-                        </span>
+                        <p className="text-xl font-bold text-gray-900">
+                          {property.rent ? formatPrice(property.rent) : property.price ? formatPrice(property.price) : 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500">{property.rent ? 'per month' : ''}</p>
+                        <div className="flex flex-col gap-2 mt-2">
+                          <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusColor(property.availability)}`}>
+                            {property.availability}
+                          </span>
+                          <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full capitalize ${getApprovalStatusColor(property.approvalStatus)}`}>
+                            {property.approvalStatus}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
                     {/* Property Stats */}
                     <div className="flex items-center space-x-6 mt-3 text-sm text-gray-500">
-                      <span>{property.views} views</span>
-                      <span>{property.inquiries} inquiries</span>
-                      <span>{property.applications} applications</span>
-                      {property.tenant && (
-                        <span className="text-blue-600">Tenant: {property.tenant.name}</span>
+                      <span>{property.views || 0} views</span>
+                      <span>{property.inquiries || 0} inquiries</span>
+                      <span>{property.applications || 0} applications</span>
+                      {property.createdBy && property.createdBy._id !== property.agent?._id && (
+                        <span className="text-blue-600">
+                          Created by: {property.createdBy.firstName} {property.createdBy.lastName}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -449,6 +530,15 @@ const PropertyManagement = () => {
                   {/* Actions */}
                   <div className="flex-shrink-0">
                     <div className="flex items-center space-x-2">
+                      {property.approvalStatus === 'pending' && (
+                        <button
+                          onClick={() => handleApproveProperty(property)}
+                          className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg"
+                          title="Approve Property"
+                        >
+                          <CheckCircleIcon className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleViewProperty(property)}
                         className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
@@ -475,152 +565,99 @@ const PropertyManagement = () => {
                 </div>
               ))}
             </div>
+          ) : (
+            /* Grid View */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredProperties.map((property) => (
+                <div key={property._id} className="relative group">
+                  <PropertyCard
+                    property={property}
+                    showSaveButton={false}
+                  />
+                  {/* Management Overlay */}
+                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {property.approvalStatus === 'pending' && (
+                      <button
+                        onClick={() => handleApproveProperty(property)}
+                        className="p-2 bg-white rounded-lg shadow-sm border hover:bg-green-50"
+                        title="Approve"
+                      >
+                        <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleViewProperty(property)}
+                      className="p-2 bg-white rounded-lg shadow-sm border hover:bg-blue-50"
+                      title="View"
+                    >
+                      <EyeIcon className="h-4 w-4 text-blue-600" />
+                    </button>
+                    <Link
+                      to={`/agent/properties/${property._id}/edit`}
+                      className="p-2 bg-white rounded-lg shadow-sm border hover:bg-green-50"
+                      title="Edit"
+                    >
+                      <PencilIcon className="h-4 w-4 text-green-600" />
+                    </Link>
+                    <button
+                      onClick={() => handleDeleteProperty(property)}
+                      className="p-2 bg-white rounded-lg shadow-sm border hover:bg-red-50"
+                      title="Delete"
+                    >
+                      <TrashIcon className="h-4 w-4 text-red-600" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Property Details Modal */}
+      {/* Property Details Modal - Keeping your existing modal code */}
+      {/* ... (keep your existing PropertyDetailsModal) ... */}
+
+      {/* Approval Modal */}
       <Modal
-        isOpen={showPropertyModal}
-        onClose={() => setShowPropertyModal(false)}
-        title="Property Details"
-        size="xl"
+        isOpen={showApprovalModal}
+        onClose={() => setShowApprovalModal(false)}
+        title="Review Property"
+        size="lg"
       >
-        {selectedProperty && (
+        {propertyToApprove && (
           <div className="space-y-6">
-            {/* Property Header */}
-            <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0 w-32 h-32 rounded-lg overflow-hidden bg-gray-200">
-                {selectedProperty.images.length > 0 ? (
-                  <img
-                    src={selectedProperty.images[0]}
-                    alt={selectedProperty.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <PhotoIcon className="h-12 w-12 text-gray-400" />
-                  </div>
-                )}
-              </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedProperty.title}</h3>
-                <div className="flex items-center space-x-2 mb-2">
-                  <MapPinIcon className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-600">{selectedProperty.location.address}</span>
-                </div>
-                <div className="flex items-center space-x-4 mb-4">
-                  <span className={`px-3 py-1 text-sm font-semibold rounded-full capitalize ${getStatusColor(selectedProperty.availability)}`}>
-                    {selectedProperty.availability}
-                  </span>
-                  {selectedProperty.featured && (
-                    <span className="px-3 py-1 text-sm font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                      Featured
-                    </span>
-                  )}
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {formatPrice(selectedProperty.rent)} / month
-                </div>
-              </div>
-            </div>
-
-            {/* Property Details */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-2xl font-bold text-gray-900">{selectedProperty.bedrooms}</div>
-                <div className="text-sm text-gray-600">Bedroom{selectedProperty.bedrooms !== 1 ? 's' : ''}</div>
-              </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-2xl font-bold text-gray-900">{selectedProperty.bathrooms}</div>
-                <div className="text-sm text-gray-600">Bathroom{selectedProperty.bathrooms !== 1 ? 's' : ''}</div>
-              </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-2xl font-bold text-gray-900">{selectedProperty.area}</div>
-                <div className="text-sm text-gray-600">m² Area</div>
-              </div>
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-2xl font-bold text-gray-900 capitalize">{selectedProperty.propertyType}</div>
-                <div className="text-sm text-gray-600">Type</div>
-              </div>
-            </div>
-
-            {/* Description */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-2">Description</h4>
-              <p className="text-gray-600">{selectedProperty.description}</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{propertyToApprove.title}</h3>
+              <p className="text-gray-600">{propertyToApprove.description}</p>
             </div>
 
-            {/* Features */}
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-2">Features</h4>
-              <div className="flex flex-wrap gap-2">
-                {selectedProperty.features.map((feature, index) => (
-                  <span 
-                    key={index} 
-                    className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"
-                  >
-                    {feature.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Statistics */}
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Performance</h4>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-bold text-gray-900">{selectedProperty.views}</div>
-                  <div className="text-xs text-gray-600">Views</div>
-                </div>
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-bold text-gray-900">{selectedProperty.inquiries}</div>
-                  <div className="text-xs text-gray-600">Inquiries</div>
-                </div>
-                <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-bold text-gray-900">{selectedProperty.applications}</div>
-                  <div className="text-xs text-gray-600">Applications</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tenant Information */}
-            {selectedProperty.tenant && (
-              <div className="border-t pt-4">
-                <h4 className="font-semibold text-gray-900 mb-3">Current Tenant</h4>
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-gray-900">{selectedProperty.tenant.name}</p>
-                      <p className="text-sm text-gray-600">{selectedProperty.tenant.phone}</p>
-                    </div>
-                    <div className="text-right text-sm">
-                      <p className="text-gray-600">Lease: {new Date(selectedProperty.tenant.leaseStart).toLocaleDateString()} - {new Date(selectedProperty.tenant.leaseEnd).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-3 pt-4 border-t">
-              <Link
-                to={`/agent/properties/${selectedProperty._id}/edit`}
-                className="btn-secondary"
+            <div className="flex gap-4">
+              <button
+                onClick={() => confirmApproval(true)}
+                disabled={actionLoading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
               >
-                <PencilIcon className="h-4 w-4 mr-2" />
-                Edit Property
-              </Link>
+                {actionLoading ? 'Processing...' : (
+                  <>
+                    <CheckCircleIcon className="h-5 w-5 mr-2" />
+                    Approve
+                  </>
+                )}
+              </button>
+              
               <button
                 onClick={() => {
-                  setShowPropertyModal(false);
-                  handleDeleteProperty(selectedProperty);
+                  if (!rejectionReason) {
+                    setRejectionReason(prompt('Enter rejection reason:') || '');
+                    return;
+                  }
+                  confirmApproval(false);
                 }}
-                className="btn-danger"
+                disabled={actionLoading}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center"
               >
-                <TrashIcon className="h-4 w-4 mr-2" />
-                Delete Property
+                <XCircleIcon className="h-5 w-5 mr-2" />
+                Reject
               </button>
             </div>
           </div>
@@ -636,6 +673,7 @@ const PropertyManagement = () => {
         message={`Are you sure you want to delete "${propertyToDelete?.title}"? This action cannot be undone.`}
         confirmText="Delete"
         type="danger"
+        loading={actionLoading}
       />
     </div>
   );

@@ -30,6 +30,14 @@ const EmployeeDashboard = () => {
   // Quick action cards (permission-driven) - logic unchanged
   const quickActions = [
     {
+      name: 'Add New Property',
+      description: 'Create property listing for approval',
+      href: '/employee/properties/new',  
+      icon: BuildingOfficeIcon,
+      color: 'bg-green-500',
+      show: canManageProperties
+    },
+    {
       name: 'Add New Tenant',
       description: 'Create and onboard new tenants',
       href: '/employee/create-tenant',

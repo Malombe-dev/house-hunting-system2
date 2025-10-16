@@ -61,7 +61,16 @@ router.put('/:id/role', authenticateToken, authorizeRoles('admin'), userControll
 // @access  Private/Admin
 router.delete('/:id', authenticateToken, authorizeRoles('admin'), userController.deleteUser);
 
-
+// Add this route to server/src/routes/users.js
+// @route   PUT /api/users/:id
+// @desc    Update user (Admin can update any user, Agent can update their employees)
+// @access  Private/Admin/Agent/Landlord
+router.put(
+    '/:id',
+    authenticateToken,
+    authorizeRoles('admin', 'agent', 'landlord'),
+    userController.updateUser
+  );
 router.post('/verify-email', userController.verifyEmail);
 
 router.post('/resend-verification', authenticateToken, userController.resendVerification);
