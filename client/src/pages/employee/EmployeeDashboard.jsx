@@ -1,7 +1,8 @@
 // client/src/pages/employee/EmployeeDashboard.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useAuth } from '../../context/AuthContext';
 import {
   UserGroupIcon,
   BuildingOfficeIcon,
@@ -11,23 +12,109 @@ import {
   CheckCircleIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
-
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import toast from 'react-hot-toast';
 
 const EmployeeDashboard = () => {
-  // keep your logic intact
+  const { user } = useAuth();
   const {
     canCreateTenants,
     canManageProperties,
     canHandlePayments,
     canViewReports,
-    accessibleFeatures,
-    user
+    accessibleFeatures
   } = usePermissions();
 
-  // Placeholder stats object — replace with real API data when ready
-  const stats = {}; // e.g. { tenants: 12, payments: 45, properties: 8 }
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ 
+    tenants: 0, 
+    payments: 0, 
+    properties: 0 
+  });
+  const [recentActivity, setRecentActivity] = useState([]);
 
-  // Quick action cards (permission-driven) - logic unchanged
+  // Fetch dashboard data on component mount
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Replace these with your actual API calls
+      await Promise.all([
+        fetchStatsData(),
+        fetchRecentActivity()
+      ]);
+      
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStatsData = async () => {
+    try {
+      // Replace with your actual API calls
+      // Example:
+      // const statsResponse = await dashboardService.getStats();
+      // setStats(statsResponse.data);
+      
+      // Mock data for now - replace with real API calls
+      setStats({
+        tenants: 12,
+        payments: 45,
+        properties: 8
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      // Keep default stats (0 values) on error
+    }
+  };
+
+  const fetchRecentActivity = async () => {
+    try {
+      // Replace with your actual API call
+      // Example:
+      // const activityResponse = await activityService.getRecent();
+      // setRecentActivity(activityResponse.data);
+      
+      // Mock data filtered by permissions
+      const mockActivity = [
+        {
+          id: 1,
+          action: 'Created tenant',
+          detail: 'John Doe - Apartment 5B',
+          time: '2 hours ago',
+          show: canCreateTenants
+        },
+        {
+          id: 2,
+          action: 'Recorded payment',
+          detail: 'KES 25,000 - Jane Smith',
+          time: '5 hours ago',
+          show: canHandlePayments
+        },
+        {
+          id: 3,
+          action: 'Updated property',
+          detail: 'Westlands Apartment - Unit 3A',
+          time: '1 day ago',
+          show: canManageProperties
+        }
+      ].filter(activity => activity.show);
+      
+      setRecentActivity(mockActivity);
+    } catch (error) {
+      console.error('Error fetching recent activity:', error);
+      setRecentActivity([]);
+    }
+  };
+
+  // Quick action cards (permission-driven)
   const quickActions = [
     {
       name: 'Add New Property',
@@ -71,39 +158,18 @@ const EmployeeDashboard = () => {
     }
   ].filter(action => action.show);
 
-  // Recent activity (mock data, still filtered by permissions)
-  const recentActivity = [
-    {
-      id: 1,
-      action: 'Created tenant',
-      detail: 'John Doe - Apartment 5B',
-      time: '2 hours ago',
-      show: canCreateTenants
-    },
-    {
-      id: 2,
-      action: 'Recorded payment',
-      detail: 'KES 25,000 - Jane Smith',
-      time: '5 hours ago',
-      show: canHandlePayments
-    },
-    {
-      id: 3,
-      action: 'Updated property',
-      detail: 'Westlands Apartment - Unit 3A',
-      time: '1 day ago',
-      show: canManageProperties
-    }
-  ].filter(activity => activity.show);
-
-  // initials avatar (Option 2)
+  // Initials avatar
   const initials = (user?.firstName || '').charAt(0).toUpperCase() +
                    (user?.lastName || '').charAt(0).toUpperCase();
 
-  // placeholder values (show -- if not provided)
-  const tenantsCount = stats.tenants || '--';
-  const paymentsCount = stats.payments || '--';
-  const propertiesCount = stats.properties || '--';
+  // Show loading spinner while data is being fetched
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <LoadingSpinner size="large" text="Loading dashboard..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -129,7 +195,7 @@ const EmployeeDashboard = () => {
         </div>
       </div>
 
-      {/* Permissions Summary (keeps original cards but slightly upgraded) */}
+      {/* Permissions Summary */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Access Permissions</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -195,7 +261,7 @@ const EmployeeDashboard = () => {
         {canCreateTenants && (
           <StatCard
             title="Tenants Created"
-            value={tenantsCount}
+            value={stats.tenants}
             subtitle="This month"
             icon={UserGroupIcon}
             color="blue"
@@ -204,7 +270,7 @@ const EmployeeDashboard = () => {
         {canHandlePayments && (
           <StatCard
             title="Payments Recorded"
-            value={paymentsCount}
+            value={stats.payments}
             subtitle="This month"
             icon={CurrencyDollarIcon}
             color="green"
@@ -213,7 +279,7 @@ const EmployeeDashboard = () => {
         {canManageProperties && (
           <StatCard
             title="Properties Managed"
-            value={propertiesCount}
+            value={stats.properties}
             subtitle="Active listings"
             icon={BuildingOfficeIcon}
             color="purple"
@@ -255,7 +321,7 @@ const EmployeeDashboard = () => {
         </div>
       )}
 
-      {/* No Permissions Message (keeps original behavior) */}
+      {/* No Permissions Message */}
       {accessibleFeatures.length === 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
           <svg className="h-16 w-16 text-yellow-500 mx-auto mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -271,7 +337,6 @@ const EmployeeDashboard = () => {
 
 /* ---------------------------
    Small UI helper components
-   (keeps logic intact — purely presentational)
    --------------------------- */
 
 const PermissionCard = ({ title, granted, description }) => {

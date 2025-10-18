@@ -85,13 +85,18 @@ exports.getAgentDetails = async (req, res) => {
   try {
     const { agentId } = req.params;
 
-    // Check if user can access this data
-    if (req.user.role !== 'admin' && req.user._id.toString() !== agentId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to view this agent\'s details'
-      });
-    }
+    
+      if (
+        req.user.role !== 'admin' &&
+        req.user._id.toString() !== agentId &&
+        req.user.createdBy?.toString() !== agentId
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to view this agent's details"
+        });
+      }
+
 
     // Get agent info
     const agent = await User.findById(agentId)
@@ -112,6 +117,42 @@ exports.getAgentDetails = async (req, res) => {
       .select('firstName lastName email jobTitle branch isActive createdAt')
       .lean();
 
+    // Get ALL user IDs (agent + employees)
+    const allUserIds = [agentId, ...employees.map(emp => emp._id.toString())];
+    
+    console.log('🔍 [Hierarchy] Searching properties for user IDs:', allUserIds);
+
+    // ✅ FIX: Get properties created by agent AND employees
+    const properties = await Property.find({ 
+      createdBy: { $in: allUserIds }
+    })
+      .select('title location status price rentAmount images propertyType bedrooms bathrooms area createdAt')
+      .populate('createdBy', 'firstName lastName email role')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log('🏠 [Hierarchy] Found properties:', properties.length);
+    console.log('👤 [Hierarchy] Property creators:', properties.map(p => ({
+      title: p.title,
+      createdBy: p.createdBy?._id,
+      creatorName: p.createdBy?.firstName
+    })));
+
+    // Get property IDs for tenant queries
+    const propertyIds = properties.map(p => p._id);
+
+    // Get tenants for these properties
+    const tenants = await Tenant.find({ 
+      property: { $in: propertyIds } 
+    })
+      .populate('user', 'firstName lastName email phone')
+      .populate('property', 'title location')
+      .populate('createdBy', 'firstName lastName')
+      .select('status leaseStart leaseEnd rentAmount createdAt')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
     // Get employee stats
     const employeeStats = await Promise.all(
       employees.map(async (emp) => {
@@ -126,24 +167,10 @@ exports.getAgentDetails = async (req, res) => {
       })
     );
 
-    // Get properties
-    const properties = await Property.find({ agent: agentId })
-      .select('name location status rentAmount units')
-      .lean();
-
-    // Get tenants with details
-    const tenants = await Tenant.find({ agent: agentId })
-      .populate('user', 'firstName lastName email phone')
-      .populate('property', 'name location')
-      .populate('createdBy', 'firstName lastName')
-      .select('status leaseStart leaseEnd rentAmount createdAt')
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
-
     // Calculate comprehensive stats
-    const totalUnits = properties.reduce((sum, prop) => sum + (prop.units || 1), 0);
+    const totalUnits = properties.reduce((sum, prop) => sum + (prop.totalUnits || 1), 0);
     const activeTenants = tenants.filter(t => t.status === 'active').length;
+    const activeProperties = properties.filter(p => p.status === 'active' || p.status === 'approved' || p.status === 'available').length;
     
     const stats = {
       totalEmployees: employees.length,
@@ -152,10 +179,11 @@ exports.getAgentDetails = async (req, res) => {
       totalUnits,
       totalTenants: tenants.length,
       activeTenants,
+      activeProperties,
       occupancyRate: totalUnits > 0 ? Math.round((activeTenants / totalUnits) * 100) : 0,
       totalRentExpected: tenants
         .filter(t => t.status === 'active')
-        .reduce((sum, t) => sum + t.rentAmount, 0)
+        .reduce((sum, t) => sum + (t.rentAmount || 0), 0)
     };
 
     res.json({

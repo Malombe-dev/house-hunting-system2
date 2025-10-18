@@ -1,6 +1,7 @@
 // File: client/src/pages/employee/EmployeePropertyList.jsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import api from '../../services/api';
 import { 
   PlusIcon,
   MagnifyingGlassIcon,
@@ -8,7 +9,8 @@ import {
   HomeIcon,
   ClockIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline';
 import LoadingSpinner, { CardLoader } from '../../components/common/LoadingSpinner';
 
@@ -19,6 +21,9 @@ const EmployeePropertyList = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [stats, setStats] = useState(null);
+  const [propertiesByCreator, setPropertiesByCreator] = useState([]);
+  const [employees, setEmployees] = useState([]);
 
   useEffect(() => {
     fetchMyProperties();
@@ -27,22 +32,68 @@ const EmployeePropertyList = () => {
   const fetchMyProperties = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/properties/my-properties`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      console.log('🔄 Starting company properties fetch...');
+  
+      const response = await api.get('/properties/company-properties');
+      console.log('📦 RAW API RESPONSE:', response);
+      console.log('📊 RESPONSE DATA:', response.data);
+  
+      // Check the structure - it might be nested under 'data'
+      const apiData = response.data.data || response.data;
+      
+      console.log('🎯 EXTRACTED DATA:', {
+        properties: apiData.properties,
+        propertiesByCreator: apiData.propertiesByCreator,
+        stats: apiData.stats,
+        employees: apiData.employees
       });
-
-      if (!response.ok) throw new Error('Failed to fetch properties');
-
-      const data = await response.json();
-      if (data.status === 'success') {
-        setProperties(data.data.properties || []);
+  
+      console.log('📈 DATA COUNTS:', {
+        propertiesCount: apiData.properties?.length,
+        propertiesByCreatorCount: apiData.propertiesByCreator?.length,
+        employeesCount: apiData.employees?.length,
+        stats: apiData.stats
+      });
+  
+      // Log each property individually
+      if (apiData.properties) {
+        console.log('🏠 INDIVIDUAL PROPERTIES:');
+        apiData.properties.forEach((property, index) => {
+          console.log(`   Property ${index + 1}:`, {
+            id: property._id,
+            title: property.title,
+            createdById: property.createdBy?._id,
+            createdByName: property.createdBy ? `${property.createdBy.firstName} ${property.createdBy.lastName}` : 'None',
+            agentId: property.agent?._id,
+            approvalStatus: property.approvalStatus,
+            availability: property.availability
+          });
+        });
       }
+  
+      // Log propertiesByCreator structure
+      if (apiData.propertiesByCreator) {
+        console.log('👥 PROPERTIES BY CREATOR:');
+        apiData.propertiesByCreator.forEach((group, index) => {
+          console.log(`   Group ${index + 1}:`, {
+            creator: `${group.creator.firstName} ${group.creator.lastName}`,
+            propertiesCount: group.properties.length,
+            properties: group.properties.map(p => p.title)
+          });
+        });
+      }
+  
+      // Set the data
+      setProperties(apiData.properties || []);
+      setStats(apiData.stats || null);
+      setPropertiesByCreator(apiData.propertiesByCreator || []);
+      setEmployees(apiData.employees || []);
+  
+      console.log('✅ DATA SET IN STATE SUCCESSFULLY');
+  
     } catch (error) {
-      console.error('Error fetching properties:', error);
-      alert('Failed to load properties');
+      console.error('❌ Error fetching properties:', error);
+      alert('Failed to load company properties');
     } finally {
       setLoading(false);
     }
@@ -61,17 +112,17 @@ const EmployeePropertyList = () => {
   const getStatusBadge = (status) => {
     const badges = {
       pending: {
-        color: 'bg-yellow-100 text-yellow-800',
+        color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
         icon: ClockIcon,
         text: 'Pending Approval'
       },
       approved: {
-        color: 'bg-green-100 text-green-800',
+        color: 'bg-green-100 text-green-800 border-green-200',
         icon: CheckCircleIcon,
         text: 'Approved'
       },
       rejected: {
-        color: 'bg-red-100 text-red-800',
+        color: 'bg-red-100 text-red-800 border-red-200',
         icon: XCircleIcon,
         text: 'Rejected'
       }
@@ -95,6 +146,10 @@ const EmployeePropertyList = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">My Properties</h1>
           <p className="text-gray-600">View and manage properties you've created</p>
+          <div className="mt-2 flex items-center text-sm text-gray-500">
+            <LockClosedIcon className="h-4 w-4 mr-1" />
+            <span>View-only access. Contact your manager for property edits.</span>
+          </div>
         </div>
         <Link 
           to="/employee/properties/new" 
@@ -106,7 +161,7 @@ const EmployeePropertyList = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -121,7 +176,7 @@ const EmployeePropertyList = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-yellow-600">
                 {properties.filter(p => p.approvalStatus === 'pending').length}
               </p>
             </div>
@@ -133,11 +188,23 @@ const EmployeePropertyList = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Approved</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-green-600">
                 {properties.filter(p => p.approvalStatus === 'approved').length}
               </p>
             </div>
             <CheckCircleIcon className="h-8 w-8 text-green-500" />
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Rejected</p>
+              <p className="text-2xl font-bold text-red-600">
+                {properties.filter(p => p.approvalStatus === 'rejected').length}
+              </p>
+            </div>
+            <XCircleIcon className="h-8 w-8 text-red-500" />
           </div>
         </div>
       </div>
@@ -152,14 +219,14 @@ const EmployeePropertyList = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search properties..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Status</option>
             <option value="pending">Pending</option>
@@ -233,7 +300,7 @@ const EmployeePropertyList = () => {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between">
-                        <div>
+                        <div className="flex-1">
                           <h3 className="text-lg font-semibold text-gray-900 truncate">
                             {property.title}
                           </h3>
@@ -249,9 +316,23 @@ const EmployeePropertyList = () => {
                             )}
                             <span>{property.area || 'N/A'} m²</span>
                           </div>
+
+                          {/* Status & Rejection Reason */}
+                          <div className="flex items-center gap-4 mt-3">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${statusBadge.color}`}>
+                              <StatusIcon className="h-4 w-4 mr-1" />
+                              {statusBadge.text}
+                            </span>
+
+                            {property.approvalStatus === 'rejected' && property.rejectionReason && (
+                              <span className="text-xs text-red-600 italic">
+                                Reason: {property.rejectionReason}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="text-right">
+                        <div className="text-right ml-4">
                           <p className="text-xl font-bold text-gray-900">
                             {property.rent ? formatPrice(property.rent) : 
                              property.price ? formatPrice(property.price) : 'N/A'}
@@ -261,28 +342,14 @@ const EmployeePropertyList = () => {
                           </p>
                         </div>
                       </div>
-
-                      {/* Status & Rejection Reason */}
-                      <div className="flex items-center gap-4 mt-3">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusBadge.color}`}>
-                          <StatusIcon className="h-4 w-4 mr-1" />
-                          {statusBadge.text}
-                        </span>
-
-                        {property.approvalStatus === 'rejected' && property.rejectionReason && (
-                          <span className="text-sm text-red-600">
-                            Reason: {property.rejectionReason}
-                          </span>
-                        )}
-                      </div>
                     </div>
 
                     {/* Actions */}
                     <div className="flex-shrink-0">
                       <Link
                         to={`/employee/properties/${property._id}`}
-                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg inline-block"
-                        title="View Details"
+                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg inline-flex items-center"
+                        title="View Details (Read-only)"
                       >
                         <EyeIcon className="h-5 w-5" />
                       </Link>

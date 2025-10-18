@@ -1,3 +1,4 @@
+// server/src/middleware/auth.js (COMPLETE & ALIGNED)
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
@@ -23,8 +24,11 @@ exports.protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+      // CRITICAL FIX: Support both 'id' and 'userId' in token
+      const userId = decoded.userId || decoded.id;
+
       // Get user from token
-      req.user = await User.findById(decoded.id).select('-password');
+      req.user = await User.findById(userId).select('-password');
 
       if (!req.user) {
         return res.status(401).json({
@@ -41,8 +45,24 @@ exports.protect = async (req, res, next) => {
         });
       }
 
+      // CRITICAL: Check if user must change password (except for password change routes)
+      if (req.user.mustChangePassword && !req.path.includes('/change-password')) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Password change required',
+          mustChangePassword: true,
+          redirectTo: '/change-password'
+        });
+      }
+
       next();
     } catch (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Token expired, please login again'
+        });
+      }
       return res.status(401).json({
         status: 'error',
         message: 'Not authorized, token failed'
@@ -78,7 +98,8 @@ exports.optionalAuth = async (req, res, next) => {
     if (token) {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = await User.findById(decoded.id).select('-password');
+        const userId = decoded.userId || decoded.id;
+        req.user = await User.findById(userId).select('-password');
       } catch (err) {
         // Token invalid, but that's okay for optional auth
         req.user = null;

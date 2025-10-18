@@ -52,6 +52,14 @@ const authReducer = (state, action) => {
         ...state,
         loading: action.payload
       };
+    case 'UPDATE_USER':
+      return {
+        ...state,
+        user: {
+          ...state.user,
+          ...action.payload
+        }
+      };
     default:
       return state;
   }
@@ -66,6 +74,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user'); // Check for stored user
       
       if (!token) {
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -73,17 +82,35 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
+        // If we have a stored user, use it immediately for better UX
+        if (storedUser) {
+          const userData = JSON.parse(storedUser);
+          dispatch({
+            type: 'AUTH_SUCCESS',
+            payload: {
+              user: userData,
+              token
+            }
+          });
+        }
+
+        // Then verify with server
         const response = await authService.getMe();
+        const freshUserData = response.data?.user || response.user;
+        
+        // Update with fresh data from server
+        localStorage.setItem('user', JSON.stringify(freshUserData));
         dispatch({
           type: 'AUTH_SUCCESS',
           payload: {
-            user: response.data?.user || response.user,
+            user: freshUserData,
             token
           }
         });
       } catch (error) {
         console.error('Auth check failed:', error);
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         dispatch({ type: 'AUTH_FAIL', payload: null });
       }
     };
@@ -91,94 +118,87 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  // Login function - UPDATED to match your response structure
-// In AuthContext.js - update the login function to properly handle employee redirection
-const login = async (credentials) => {
-  dispatch({ type: 'AUTH_START' });
-  
-  try {
-    console.log('🔄 AuthContext - Attempting login...');
-    const response = await authService.login(credentials);
-    console.log('✅ AuthContext - Login response:', response);
+  // Login function - FIXED VERSION
+  const login = async (credentials) => {
+    dispatch({ type: 'AUTH_START' });
     
-    const { data } = response;
-
-    // Check if password change is required
-    if (data.requiresPasswordChange) {
-      console.log('🔐 AuthContext - Password change required');
-      dispatch({ type: 'AUTH_FAIL', payload: null });
+    try {
+      console.log('🔄 AuthContext - Attempting login...');
+      const response = await authService.login(credentials);
+      console.log('✅ AuthContext - Login response:', response);
       
-      return { 
-        success: true, 
-        requiresPasswordChange: true,
-        tempToken: data.tempToken,
-        user: data.user
-      };
-    }
-    
-    // Normal login - store token and authenticate
-    if (data.token && data.user) {
-      localStorage.setItem('token', data.token);
+      const { data } = response;
+
+      // Check if password change is required
+      if (data.requiresPasswordChange) {
+        console.log('🔐 AuthContext - Password change required');
+        dispatch({ type: 'AUTH_FAIL', payload: null });
+        
+        return { 
+          success: true, 
+          requiresPasswordChange: true,
+          tempToken: data.tempToken,
+          user: data.user
+        };
+      }
+      
+      // Normal login - store both token AND user data
+      if (data.token && data.user) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user)); // Store user data
+        
+        // Ensure permissions are properly structured
+        const userWithPermissions = {
+          ...data.user,
+          permissions: data.user.permissions || {
+            canCreateTenants: false,
+            canViewReports: false,
+            canManageProperties: false,
+            canHandlePayments: false
+          }
+        };
+
+        console.log('👤 Storing user with permissions:', userWithPermissions.permissions);
+        
+        dispatch({
+          type: 'AUTH_SUCCESS',
+          payload: { 
+            user: userWithPermissions, 
+            token: data.token 
+          }
+        });
+        
+        // Return success but let the component handle navigation
+        return { 
+          success: true, 
+          user: userWithPermissions,
+          requiresPasswordChange: false
+        };
+      } else {
+        throw new Error('Invalid response structure from server');
+      }
+      
+    } catch (error) {
+      console.error('❌ AuthContext - Login error:', error);
+      
+      let errorMessage = 'Login failed';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       
       dispatch({
-        type: 'AUTH_SUCCESS',
-        payload: { user: data.user, token: data.token }
+        type: 'AUTH_FAIL',
+        payload: errorMessage
       });
       
-      // Get redirect path based on user role
-      const redirectPath = getRoleBasedRedirect(data.user.role);
-      console.log(`🔄 AuthContext - Redirecting ${data.user.role} to: ${redirectPath}`);
-      
-      toast.success(`Welcome back, ${data.user.firstName}!`);
-      return { 
-        success: true, 
-        user: data.user,
-        redirectTo: redirectPath 
-      };
-    } else {
-      throw new Error('Invalid response structure from server');
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     }
-    
-  } catch (error) {
-    console.error('❌ AuthContext - Login error:', error);
-    
-    // Handle different error types
-    let errorMessage = 'Login failed';
-    
-    if (error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-    
-    dispatch({
-      type: 'AUTH_FAIL',
-      payload: errorMessage
-    });
-    
-    toast.error(errorMessage);
-    return { success: false, error: errorMessage };
-  }
-};
+  };
 
-// Add this helper function to AuthContext
-const getRoleBasedRedirect = (role) => {
-  switch (role) {
-    case 'admin':
-      return '/admin/dashboard';
-    case 'agent':
-    case 'landlord':
-      return '/agent/dashboard';
-    case 'employee':
-      return '/employee/dashboard';
-    case 'tenant':
-      return '/tenant/dashboard';
-    case 'seeker':
-      return '/';
-    default:
-      return '/';
-  }
-};
   // Register function
   const register = async (userData) => {
     dispatch({ type: 'AUTH_START' });
@@ -189,6 +209,7 @@ const getRoleBasedRedirect = (role) => {
       const user = response.data?.user || response.user;
       
       localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user)); // Store user data
       
       dispatch({
         type: 'AUTH_SUCCESS',
@@ -215,35 +236,40 @@ const getRoleBasedRedirect = (role) => {
       console.error('Logout error:', error);
     } finally {
       localStorage.removeItem('token');
+      localStorage.removeItem('user'); // Clear user data
       dispatch({ type: 'LOGOUT' });
       showNotification('Logged out successfully', 'info');
     }
   };
 
-  // Update user in context (after password change, etc)
-  const updateUser = (user) => {
+  // Update user in context
+  const updateUser = (userData) => {
+    const updatedUser = {
+      ...state.user,
+      ...userData
+    };
+    
+    localStorage.setItem('user', JSON.stringify(updatedUser)); // Update stored user
+    
     dispatch({
-      type: 'AUTH_SUCCESS',
-      payload: {
-        user,
-        token: state.token
-      }
+      type: 'UPDATE_USER',
+      payload: userData
     });
   };
-  // In AuthContext.js - add this method
-const completePasswordChange = (user, token) => {
-  console.log('🔄 AuthContext - Completing password change');
-  localStorage.setItem('token', token);
-  
-  dispatch({
-    type: 'AUTH_SUCCESS',
-    payload: { user, token }
-  });
-  
-  toast.success(`Welcome, ${user.firstName}! Password changed successfully.`);
-};
 
-
+  // Complete password change
+  const completePasswordChange = (user, token) => {
+    console.log('🔄 AuthContext - Completing password change');
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user)); // Store user data
+    
+    dispatch({
+      type: 'AUTH_SUCCESS',
+      payload: { user, token }
+    });
+    
+    toast.success(`Welcome, ${user.firstName}! Password changed successfully.`);
+  };
 
   const value = {
     user: state.user,

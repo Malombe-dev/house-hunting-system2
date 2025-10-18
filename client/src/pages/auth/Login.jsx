@@ -36,22 +36,17 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const result = await login(data);
-      console.log('Login result:', result); // Debug
-      // In your login form, check what's being sent
       console.log('📤 Sending login data:', data);
-      
-
-      
+      const result = await login(data);
+      console.log('🔑 Login result:', result);
+  
       if (result.success) {
-        // AuthContext already extracts requiresPasswordChange, tempToken, and user
         // Check if password change is required
         if (result.requiresPasswordChange) {
-          console.log('Password change required, redirecting...');
+          console.log('🔄 Password change required');
           console.log('Temp token:', result.tempToken);
           console.log('User:', result.user);
           
-          // Redirect to password change page with temp token
           navigate('/auth/first-login-change-password', { 
             state: { 
               user: result.user,
@@ -63,18 +58,39 @@ const Login = () => {
           return;
         }
         
-        // Regular login - navigate based on role
+        // ✅ FIX: Wait a bit for AuthContext to update and ensure user data is available
+        if (!result.user) {
+          console.error('❌ No user data in login result');
+          toast.error('Login successful but user data is missing. Please refresh.');
+          return;
+        }
+  
+        console.log('✅ Login successful - User:', result.user);
+        console.log('🔐 Permissions:', result.user?.permissions);
+        
         toast.success(`Welcome back, ${result.user.firstName}!`);
-        const redirectPath = getRoleBasedRedirect(result.user.role);
-        navigate(redirectPath, { replace: true });
+        
+        // ✅ FIX: Add small delay to ensure AuthContext state is updated
+        setTimeout(() => {
+          const redirectPath = getRoleBasedRedirect(result.user.role);
+          console.log('🎯 Redirecting to:', redirectPath);
+          navigate(redirectPath, { replace: true });
+        }, 200); // Increased delay to ensure state propagation
+        
+      } else {
+        // Handle case where result.success is false
+        console.error('❌ Login failed in result:', result);
+        toast.error(result.error || 'Login failed. Please check your credentials.');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       toast.error(error.message || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
+  
+
 
 const getRoleBasedRedirect = (role) => {
   switch (role) {

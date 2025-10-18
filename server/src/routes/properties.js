@@ -62,6 +62,17 @@ router.patch(
 // @desc    Get properties by agent
 // @access  Public
 router.get('/agent/:agentId', propertyController.getPropertiesByAgent);
+// server/src/routes/properties.js - Add this route
+
+// @route   GET /api/properties/company-properties
+// @desc    Get all properties for agent's company (agent + employees)
+// @access  Private/Agent
+router.get(
+  '/company-properties',
+  authenticateToken,
+  authorizeRoles('agent', 'landlord','employee'),
+  propertyController.getCompanyProperties
+);
 
 // @route   GET /api/properties/:id
 // @desc    Get property by ID

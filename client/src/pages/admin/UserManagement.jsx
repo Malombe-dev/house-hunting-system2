@@ -122,10 +122,13 @@ const UserManagement = () => {
     }
   };
 
+  // UPDATED: Fixed toggle user status with better error handling
   const toggleUserStatus = async (user) => {
     try {
       const newStatus = !user.isActive;
-      await userService.updateUserStatus(user._id, { isActive: newStatus });
+      
+      // Call the API to update status
+      const response = await userService.updateUserStatus(user._id, { isActive: newStatus });
       
       // Update local state
       setUsers(prev => prev.map(u => 
@@ -135,15 +138,26 @@ const UserManagement = () => {
       // If viewing this user, update the selected user as well
       if (selectedUser && selectedUser._id === user._id) {
         setSelectedUser(prev => ({ ...prev, isActive: newStatus }));
+        // Also update in userDetails if it exists
+        if (userDetails?.user) {
+          setUserDetails(prev => ({
+            ...prev,
+            user: { ...prev.user, isActive: newStatus }
+          }));
+        }
       }
       
       showNotification(
         `User ${newStatus ? 'activated' : 'deactivated'} successfully`, 
         'success'
       );
+      
+      return response;
     } catch (error) {
       console.error('Error updating user status:', error);
-      showNotification('Failed to update user status', 'error');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update user status';
+      showNotification(errorMessage, 'error');
+      throw error;
     }
   };
 
@@ -523,38 +537,49 @@ const StatCard = ({ title, value, icon: Icon, color }) => {
   );
 };
 
-// User Actions Component
-const UserActions = ({ user, onView, onDelete, onToggleStatus }) => (
-  <div className="flex justify-end space-x-2">
-    <button
-      onClick={() => onToggleStatus(user)}
-      className={`p-2 rounded-lg transition-colors ${
-        user.isActive 
-          ? 'text-green-600 hover:text-green-900 hover:bg-green-50' 
-          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-      }`}
-      title={user.isActive ? 'Deactivate User' : 'Activate User'}
-    >
-      <PowerIcon className="h-4 w-4" />
-    </button>
-    <button
-      onClick={() => onView(user)}
-      className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
-      title="View Details"
-    >
-      <EyeIcon className="h-4 w-4" />
-    </button>
-    <button
-      onClick={() => onDelete(user)}
-      className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
-      title="Delete User"
-    >
-      <TrashIcon className="h-4 w-4" />
-    </button>
-  </div>
-);
+// UPDATED: User Actions Component with better event handling
+const UserActions = ({ user, onView, onDelete, onToggleStatus }) => {
+  const handleToggleStatus = async (e) => {
+    e.stopPropagation();
+    try {
+      await onToggleStatus(user);
+    } catch (error) {
+      console.error('Failed to toggle status:', error);
+    }
+  };
 
-// User Details with Hierarchy Component
+  return (
+    <div className="flex justify-end space-x-2">
+      <button
+        onClick={handleToggleStatus}
+        className={`p-2 rounded-lg transition-colors ${
+          user.isActive 
+            ? 'text-green-600 hover:text-green-900 hover:bg-green-50' 
+            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+        }`}
+        title={user.isActive ? 'Deactivate User' : 'Activate User'}
+      >
+        <PowerIcon className="h-4 w-4" />
+      </button>
+      <button
+        onClick={() => onView(user)}
+        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
+        title="View Details"
+      >
+        <EyeIcon className="h-4 w-4" />
+      </button>
+      <button
+        onClick={() => onDelete(user)}
+        className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
+        title="Delete User"
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </div>
+  );
+};
+
+// UPDATED: User Details with Hierarchy Component - showing company properties
 const UserDetailsWithHierarchy = ({ details, user }) => {
   const formatDate = (date) => {
     if (!date) return 'N/A';
@@ -632,24 +657,50 @@ const UserDetailsWithHierarchy = ({ details, user }) => {
           <h4 className="font-semibold text-gray-900 mb-4">Team & Statistics</h4>
           
           {/* Stats Grid */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
               <p className="text-2xl font-bold text-blue-600">{stats.totalEmployees || 0}</p>
               <p className="text-sm text-gray-600">Employees</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-center p-4 bg-green-50 rounded-lg border border-green-100">
               <p className="text-2xl font-bold text-green-600">{stats.totalProperties || 0}</p>
-              <p className="text-sm text-gray-600">Properties</p>
+              <p className="text-sm text-gray-600">My Properties</p>
             </div>
-            <div className="text-center p-4 bg-purple-50 rounded-lg">
+            <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-100">
               <p className="text-2xl font-bold text-purple-600">{stats.totalTenants || 0}</p>
               <p className="text-sm text-gray-600">Tenants</p>
             </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg">
+            <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-100">
               <p className="text-2xl font-bold text-orange-600">{stats.occupancyRate || 0}%</p>
               <p className="text-sm text-gray-600">Occupancy</p>
             </div>
           </div>
+
+          {/* Company Properties Summary - Highlighted */}
+          {stats.totalEmployees > 0 && (
+            <div className="mb-6 p-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md text-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-blue-100 mb-1">Total Company Properties</p>
+                  <p className="text-3xl font-bold">
+                    {(stats.companyProperties || stats.totalProperties || 0) + (stats.employeeProperties || 0)}
+                  </p>
+                  <p className="text-xs text-blue-100 mt-2">
+                    {stats.totalProperties || 0} direct + {stats.employeeProperties || 0} from employees
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-blue-100 mb-1">Total Units</p>
+                  <p className="text-2xl font-bold">
+                    {stats.totalUnits || 0}
+                  </p>
+                  <p className="text-xs text-blue-100 mt-2">
+                    across all properties
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Expected Rent */}
           {stats.totalRentExpected && (

@@ -1,0 +1,4 @@
+for the property form , add ,, floor and house no. for resdentials 
+
+eg . if the property is in a certain apartmemnt , i can create apartment name , first floor , house no. 
+apartment name ,floor 1

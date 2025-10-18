@@ -138,6 +138,8 @@ function App() {
               <Route path="properties/new" element={<CreatePropertyForm />} />
               <Route path="properties" element={<PropertyManagement />} />
               <Route path="properties/:id/edit" element={<EditProperty/>} />
+              <Route path="properties/:id" element={<PropertyDetails />} />
+
 
             </Route>
                           

@@ -57,84 +57,79 @@ const AgentDashboard = () => {
     fetchDashboardData();
   }, []);
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
 
-      console.log('Starting dashboard data fetch...');
+const fetchDashboardData = async () => {
+  try {
+    setLoading(true);
 
-      // Fetch data - hierarchy contains everything we need
-      const requests = [
-        api.get(`/hierarchy/agent/${user.id}`).catch(err => {
-          console.warn('Hierarchy fetch failed:', err.response?.data || err.message);
-          return { data: { employees: [], properties: [], stats: {} } };
-        }),
-        api.get('/properties/my-properties').catch(err => {
-          console.warn('Properties fetch failed:', err.response?.data || err.message);
-          return { data: { properties: [] } };
-        }),
-        api.get('/properties/pending').catch(err => {
-          console.warn('Pending properties fetch failed:', err.response?.data || err.message);
-          return { data: { properties: [] } };
-        })
-      ];
+    console.log('Starting dashboard data fetch...');
 
-      const [hierarchyRes, propertiesRes, pendingRes] = await Promise.all(requests);
+    // Fetch data - hierarchy contains everything we need including team properties
+    const requests = [
+      api.get(`/hierarchy/agent/${user.id}`).catch(err => {
+        console.warn('Hierarchy fetch failed:', err.response?.data || err.message);
+        return { data: { employees: [], properties: [], stats: {} } };
+      }),
+      api.get('/properties/pending').catch(err => {
+        console.warn('Pending properties fetch failed:', err.response?.data || err.message);
+        return { data: { properties: [] } };
+      })
+    ];
 
-      console.log('Raw API responses:', {
-        hierarchy: hierarchyRes.data,
-        properties: propertiesRes.data,
-        pending: pendingRes.data
-      });
+    const [hierarchyRes, pendingRes] = await Promise.all(requests);
 
-      // Extract data from responses based on the actual structure from your logs
-      const hierarchyData = hierarchyRes.data || {};
-      const employeesData = hierarchyData.employees || [];
-      const hierarchyProperties = hierarchyData.properties || [];
-      const hierarchyStats = hierarchyData.stats || {};
-      
-      const propertiesData = propertiesRes.data?.properties || propertiesRes.data || [];
-      const pendingPropertiesData = pendingRes.data?.properties || pendingRes.data || [];
+    console.log('Raw API responses:', {
+      hierarchy: hierarchyRes.data,
+      pending: pendingRes.data
+    });
 
-      console.log('Extracted data:', {
-        employeesData,
-        propertiesData,
-        pendingPropertiesData,
-        hierarchyStats
-      });
+    // Extract data from responses
+    const hierarchyData = hierarchyRes.data || {};
+    const employeesData = hierarchyData.employees || [];
+    const hierarchyProperties = hierarchyData.properties || []; // This should include all team properties
+    const hierarchyStats = hierarchyData.stats || {};
+    
+    const pendingPropertiesData = pendingRes.data?.properties || pendingRes.data || [];
 
-      // Calculate real stats
-      const totalProperties = propertiesData.length || hierarchyProperties.length;
-      const activeProperties = propertiesData.filter(p => 
-        p.status === 'active' || p.status === 'approved'
-      ).length;
+    console.log('Extracted data:', {
+      employeesData,
+      hierarchyProperties, // Using hierarchy properties instead
+      pendingPropertiesData,
+      hierarchyStats
+    });
 
-      const pendingPropertiesCount = pendingPropertiesData.length;
+    // Calculate real stats - USE HIERARCHY PROPERTIES
+    const totalProperties = hierarchyProperties.length;
+    const activeProperties = hierarchyProperties.filter(p => 
+      p.status === 'active' || p.status === 'approved'
+    ).length;
 
-      setStats({
-        totalProperties,
-        activeTenants: hierarchyStats.totalTenants || 0,
-        totalEmployees: employeesData.length,
-        monthlyIncome: hierarchyStats.monthlyIncome || 1250000,
-        maintenanceRequests: hierarchyStats.maintenanceRequests || 7,
-        propertyGrowth: hierarchyStats.propertyGrowth || 15.2,
-        tenantGrowth: hierarchyStats.tenantGrowth || 8.5,
-        incomeGrowth: hierarchyStats.incomeGrowth || 22.1,
-        maintenanceIncrease: hierarchyStats.maintenanceIncrease || -12.3,
-        occupancyRate: totalProperties > 0 ? Math.round((activeProperties / totalProperties) * 100) : 0,
-        averageRent: hierarchyStats.averageRent || 52000,
-        pendingProperties: pendingPropertiesCount
-      });
+    const pendingPropertiesCount = pendingPropertiesData.length;
 
-      setEmployees(employeesData);
-      setPendingProperties(pendingPropertiesData);
+    setStats({
+      totalProperties,
+      activeTenants: hierarchyStats.totalTenants || 0,
+      totalEmployees: employeesData.length,
+      monthlyIncome: hierarchyStats.monthlyIncome || 1250000,
+      maintenanceRequests: hierarchyStats.maintenanceRequests || 7,
+      propertyGrowth: hierarchyStats.propertyGrowth || 15.2,
+      tenantGrowth: hierarchyStats.tenantGrowth || 8.5,
+      incomeGrowth: hierarchyStats.incomeGrowth || 22.1,
+      maintenanceIncrease: hierarchyStats.maintenanceIncrease || -12.3,
+      occupancyRate: totalProperties > 0 ? Math.round((activeProperties / totalProperties) * 100) : 0,
+      averageRent: hierarchyStats.averageRent || 52000,
+      pendingProperties: pendingPropertiesCount
+    });
 
-    } catch (error) {
-      console.error('Error in fetchDashboardData:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setEmployees(employeesData);
+    setPendingProperties(pendingPropertiesData);
+
+  } catch (error) {
+    console.error('Error in fetchDashboardData:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleEmployeeCreated = async (newEmployee) => {
     try {

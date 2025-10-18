@@ -75,4 +75,35 @@ router.post('/verify-email', userController.verifyEmail);
 
 router.post('/resend-verification', authenticateToken, userController.resendVerification);
 
+// server/src/routes/users.js - Add this route
+router.get('/seekers', authenticateToken, authorizeRoles('agent', 'admin', 'employee'), async (req, res) => {
+  try {
+    const { search } = req.query;
+    const query = { role: 'seeker' };
+
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const users = await User.find(query)
+      .select('firstName lastName email phone idNumber')
+      .limit(10);
+
+    res.json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    console.error('Search seekers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 module.exports = router;

@@ -559,6 +559,8 @@ exports.getPropertiesByAgent = async (req, res, next) => {
   }
 };
 
+// Add these methods to your propertyController.js
+
 // @desc    Get my properties (for logged in user)
 // @route   GET /api/properties/my-properties
 // @access  Private
@@ -566,9 +568,23 @@ exports.getMyProperties = async (req, res, next) => {
   try {
     const filter = {};
     
-    // If agent, show properties they own
-    if (req.user.role === 'agent') {
-      filter.agent = req.user._id;
+    // If agent, show properties they own AND properties created by their employees
+    if (req.user.role === 'agent' || req.user.role === 'landlord') {
+      // Get all employees under this agent
+      const employees = await User.find({ 
+        parentAgent: req.user._id,
+        role: 'employee'
+      }).select('_id');
+      
+      const employeeIds = employees.map(emp => emp._id);
+      
+      // Show properties where:
+      // 1. Agent is the owner (agent field)
+      // 2. OR created by any of their employees
+      filter.$or = [
+        { agent: req.user._id },
+        { createdBy: { $in: employeeIds } }
+      ];
     } 
     // If employee, show properties they created
     else if (req.user.role === 'employee') {
@@ -580,16 +596,45 @@ exports.getMyProperties = async (req, res, next) => {
     }
 
     const properties = await Property.find(filter)
-      .populate('agent', 'firstName lastName email')
+      .populate('agent', 'firstName lastName email businessName')
       .populate('createdBy', 'firstName lastName role')
       .populate('approvedBy', 'firstName lastName')
       .sort('-createdAt');
+
+    // Calculate statistics for agents
+    let stats = null;
+    if (req.user.role === 'agent' || req.user.role === 'landlord') {
+      const totalProperties = properties.length;
+      const myDirectProperties = properties.filter(p => 
+        p.agent._id.toString() === req.user._id.toString()
+      ).length;
+      const employeeProperties = totalProperties - myDirectProperties;
+      
+      const approvedCount = properties.filter(p => p.approvalStatus === 'approved').length;
+      const pendingCount = properties.filter(p => p.approvalStatus === 'pending').length;
+      const rejectedCount = properties.filter(p => p.approvalStatus === 'rejected').length;
+      
+      const availableCount = properties.filter(p => p.availability === 'available').length;
+      const occupiedCount = properties.filter(p => p.availability === 'occupied').length;
+
+      stats = {
+        totalProperties,
+        myDirectProperties,
+        employeeProperties,
+        approvedCount,
+        pendingCount,
+        rejectedCount,
+        availableCount,
+        occupiedCount
+      };
+    }
 
     res.status(200).json({
       status: 'success',
       data: {
         count: properties.length,
-        properties
+        properties,
+        stats
       }
     });
   } catch (error) {
@@ -597,6 +642,166 @@ exports.getMyProperties = async (req, res, next) => {
   }
 };
 
+
+// @route   GET /api/properties/company-properties
+// @access  Private (Agent/Landlord)
+exports.getCompanyProperties = async (req, res, next) => {
+  try {
+    console.log('🔍 === COMPANY PROPERTIES DEBUG START ===');
+    console.log('👤 Request User ID:', req.user._id.toString());
+    console.log('👤 Request User Role:', req.user.role);
+
+    // Allow agents, landlords, AND employees to access all properties
+    if (!['agent', 'landlord', 'employee', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied'
+      });
+    }
+
+    let filter = {};
+    let employees = [];
+
+    if (req.user.role === 'employee') {
+      // 🆕 EMPLOYEE: Can view ALL properties (for customer inquiries)
+      console.log('👤 Employee - viewing ALL properties for customer inquiries');
+      // No filter - employees see everything
+      filter = {};
+    } else if (req.user.role === 'agent' || req.user.role === 'landlord') {
+      // Agent/Landlord sees company properties (their own + employees)
+      console.log('🔎 Searching for employees with createdBy:', req.user._id.toString());
+      
+      employees = await User.find({ 
+        createdBy: req.user._id,
+        role: 'employee'
+      }).select('_id firstName lastName createdBy role');
+      
+      console.log('👥 Employees found:', employees.length);
+
+      const employeeIds = employees.map(emp => emp._id);
+      
+      filter = {
+        $or: [
+          { agent: req.user._id },
+          { createdBy: { $in: employeeIds } }
+        ]
+      };
+      console.log('👔 Agent/Landlord - viewing company properties');
+    }
+    // Admin sees all properties (no filter)
+
+    console.log('🔎 Property filter:', JSON.stringify(filter));
+
+    const properties = await Property.find(filter)
+      .populate('agent', 'firstName lastName email businessName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('approvedBy', 'firstName lastName')
+      .sort('-createdAt');
+
+    console.log('🏠 Properties found:', properties.length);
+    
+    // Debug each property
+    properties.forEach((prop, index) => {
+      console.log(`   Property ${index + 1}:`, {
+        title: prop.title,
+        agent: prop.agent?._id?.toString(),
+        createdBy: prop.createdBy?._id?.toString(),
+        approvalStatus: prop.approvalStatus,
+        availability: prop.availability
+      });
+    });
+
+    // Group properties by creator (for agents/landlords)
+    const propertiesByCreator = {};
+    
+    if (req.user.role === 'agent' || req.user.role === 'landlord') {
+      // Add agent's direct properties
+      const agentProperties = properties.filter(p => 
+        p.agent && p.agent._id.toString() === req.user._id.toString()
+      );
+      
+      propertiesByCreator[req.user._id.toString()] = {
+        creator: {
+          _id: req.user._id,
+          firstName: req.user.firstName,
+          lastName: req.user.lastName,
+          role: req.user.role
+        },
+        properties: agentProperties
+      };
+
+      // Add properties by each employee
+      employees.forEach(employee => {
+        const empProperties = properties.filter(p => 
+          p.createdBy && p.createdBy._id.toString() === employee._id.toString()
+        );
+        
+        if (empProperties.length > 0) {
+          propertiesByCreator[employee._id.toString()] = {
+            creator: {
+              _id: employee._id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              role: 'employee'
+            },
+            properties: empProperties
+          };
+        }
+      });
+    }
+
+    // Calculate stats
+    const stats = {
+      totalProperties: properties.length,
+      approved: properties.filter(p => p.approvalStatus === 'approved').length,
+      pending: properties.filter(p => p.approvalStatus === 'pending').length,
+      rejected: properties.filter(p => p.approvalStatus === 'rejected').length,
+      available: properties.filter(p => p.availability === 'available').length,
+      occupied: properties.filter(p => p.availability === 'occupied').length,
+      underMaintenance: properties.filter(p => p.availability === 'under maintenance').length,
+      totalExpectedRent: properties
+        .filter(p => p.rent && p.availability === 'occupied')
+        .reduce((sum, p) => sum + (p.rent || 0), 0),
+      totalPotentialRent: properties
+        .filter(p => p.rent)
+        .reduce((sum, p) => sum + (p.rent || 0), 0)
+    };
+
+    // Add employee-specific stats
+    if (req.user.role === 'employee') {
+      stats.myProperties = properties.filter(p => 
+        p.createdBy && p.createdBy._id.toString() === req.user._id.toString()
+      ).length;
+    } else if (req.user.role === 'agent' || req.user.role === 'landlord') {
+      stats.myDirectProperties = properties.filter(p => 
+        p.agent && p.agent._id.toString() === req.user._id.toString()
+      ).length;
+      stats.employeeProperties = properties.length - stats.myDirectProperties;
+      stats.totalEmployees = employees.length;
+    }
+
+    console.log('✅ Sending response with:', {
+      properties: properties.length,
+      employees: employees.length,
+      userRole: req.user.role
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        properties,
+        propertiesByCreator: req.user.role === 'employee' ? [] : Object.values(propertiesByCreator),
+        stats,
+        employees: req.user.role === 'employee' ? [] : employees,
+        userRole: req.user.role // Include role in response for frontend
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error in getCompanyProperties:', error);
+    next(error);
+  }
+};
 // @desc    Search properties
 // @route   GET /api/properties/search
 // @access  Public
