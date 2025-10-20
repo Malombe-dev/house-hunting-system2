@@ -26,13 +26,10 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import VerifyEmail from './pages/auth/VerifyEmail';
 import FirstLoginChangePassword from './pages/auth/FirstLoginPasswordChange';
 
-
-
-
 // Public Pages
 import Home from './pages/public/Home';
 import PropertySearch from './pages/seeker/PropertySearch';
-import PropertyDetails from './pages/seeker/PropertyDetails';
+import PropertyDetails from './pages/seeker/PropertyDetails'; // Public view
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -44,16 +41,18 @@ import PlatformAnalytics from './pages/admin/PlatformAnalytics';
 // Agent Pages
 import AgentDashboard from './pages/agent/AgentDashboard';
 import PropertyManagement from './pages/agent/PropertyManagement';
+import AgentPropertyDetails from './pages/agent/AgentPropertyDetails'; // 🆕 NEW: Agent view with unit management
 import TenantManagement from './pages/agent/TenantManagement';
 import PaymentTracking from './pages/agent/PaymentTracking';
 import MaintenanceRequests from './pages/agent/MaintenanceRequests';
 import AgentAnalytics from './pages/agent/AgentAnalytics';
 
-//employee pages 
+// Employee pages 
 import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import EmployeeCreateProperty from './pages/employee/EmployeeCreateProperty';
 import EmployeePropertyList from './pages/employee/EmployeePropertyList';
 import EmployeePropertyView from './pages/employee/EmployeePropertyView';
+
 // Tenant Pages
 import TenantDashboard from './pages/tenant/TenantDashboard';
 import RentPayments from './pages/tenant/RentPayments';
@@ -75,7 +74,6 @@ function App() {
   return (
     <AuthProvider>
       <NotificationProvider>
-        
         <div className="App">
           <Routes>
             {/* Public Routes */}
@@ -83,7 +81,6 @@ function App() {
               <Route index element={<Home />} />
               <Route path="properties" element={<PropertySearch />} />
               <Route path="properties/:id" element={<PropertyDetails />} />
-            
               <Route path="create-agent" element={<CreateAgentForm />} />
               <Route path="create-employee" element={<CreateEmployeeForm />} />
             </Route>
@@ -95,9 +92,6 @@ function App() {
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="auth/first-login-change-password" element={<FirstLoginChangePassword />} />
 
-              
-
-
             {/* Admin Routes */}
             <Route
               path="/admin/*"
@@ -107,7 +101,6 @@ function App() {
                 </ProtectedRoute>
               }
             >
-
               <Route index element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<UserManagement />} />
@@ -138,39 +131,34 @@ function App() {
               <Route path="properties/new" element={<CreatePropertyForm />} />
               <Route path="properties" element={<PropertyManagement />} />
               <Route path="properties/:id/edit" element={<EditProperty/>} />
-              <Route path="properties/:id" element={<PropertyDetails />} />
-
-
+              {/* 🆕 UPDATED: Changed from PropertyDetails to AgentPropertyDetails */}
+              <Route path="properties/:id" element={<AgentPropertyDetails />} />
             </Route>
                           
-                {/* Employee Routes */}
-                <Route
-                  path="/employee/*"
-                  element={
-                    <ProtectedRoute allowedRoles={['employee']}>
-                      <EmployeeLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<Navigate to="/employee/dashboard" replace />} />
-                  <Route path="dashboard" element={<EmployeeDashboard />} />
-                  <Route path="profile" element={<Profile />} />
-                  <Route path="settings" element={<Settings />} />
-                  <Route path="tenants" element={<TenantManagement />} />
-                  
-                 
-                  <Route path="properties/:id" element={<PropertyDetails />} />
-                  <Route path="payments" element={<PaymentTracking />} />
-
-                  <Route path="properties">
-                    <Route index element={<EmployeePropertyList />} />
-                    <Route path="new" element={<EmployeeCreateProperty />} />
-                    <Route path=":id" element={<EmployeePropertyView />} />
-                  
-                  </Route>
-
-                 
-                </Route>
+            {/* Employee Routes */}
+            <Route
+              path="/employee/*"
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <EmployeeLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/employee/dashboard" replace />} />
+              <Route path="dashboard" element={<EmployeeDashboard />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="tenants" element={<TenantManagement />} />
+              <Route path="payments" element={<PaymentTracking />} />
+              
+              <Route path="properties">
+                <Route index element={<EmployeePropertyList />} />
+                <Route path="new" element={<EmployeeCreateProperty />} />
+                {/* 🆕 UPDATED: Changed from EmployeePropertyView to AgentPropertyDetails for consistency */}
+                <Route path=":id" element={<AgentPropertyDetails />} />
+                <Route path=":id/edit" element={<EditProperty />} />
+              </Route>
+            </Route>
 
             {/* Tenant Routes */}
             <Route
@@ -189,8 +177,6 @@ function App() {
               <Route path="payment-history" element={<PaymentHistory />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
-              
-
             </Route>
 
             {/* House Seeker Routes */}

@@ -2,3 +2,7 @@ for the property form , add ,, floor and house no. for resdentials
 
 eg . if the property is in a certain apartmemnt , i can create apartment name , first floor , house no. 
 apartment name ,floor 1
+
+on the add property we are adding a property ,, but now after adding ,, example an apartment , we should now include example floor 3 house no. 2f etc , based on the uploaded propery,, t
+the property should be available untill all rooms are occupied ,after all rooms are occupied now the property should be unavailable 
+on displaying the property on the more details page we should display available rooms 

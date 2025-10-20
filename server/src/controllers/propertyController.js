@@ -849,3 +849,558 @@ exports.searchProperties = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Add units to a property
+// @route   POST /api/properties/:id/units
+// @access  Private (Agent/Employee/Admin)
+exports.addUnits = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isCreator = property.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized to add units to this property'
+      });
+    }
+
+    // Validate units array
+    const { units } = req.body;
+    if (!Array.isArray(units) || units.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Units array is required'
+      });
+    }
+
+    // Mark property as having units
+    property.hasUnits = true;
+
+    // Add each unit
+    units.forEach(unitData => {
+      property.units.push(unitData);
+    });
+
+    await property.save();
+    await property.populate('agent createdBy');
+
+    res.status(201).json({
+      status: 'success',
+      message: `${units.length} unit(s) added successfully`,
+      data: { 
+        property,
+        addedUnits: units.length,
+        totalUnits: property.units.length
+      }
+    });
+  } catch (error) {
+    console.error('Error adding units:', error);
+    next(error);
+  }
+};
+
+// @desc    Get all units for a property
+// @route   GET /api/properties/:id/units
+// @access  Public
+exports.getPropertyUnits = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id)
+      .populate('agent', 'firstName lastName businessName phone email')
+      .populate('units.tenant', 'firstName lastName email phone');
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    if (!property.hasUnits) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'This property does not have multiple units'
+      });
+    }
+
+    // Filter based on user role
+    let units = property.units;
+    
+    // Non-authenticated users only see basic info
+    if (!req.user) {
+      units = units.map(unit => ({
+        _id: unit._id,
+        unitNumber: unit.unitNumber,
+        floor: unit.floor,
+        bedrooms: unit.bedrooms,
+        bathrooms: unit.bathrooms,
+        area: unit.area,
+        rent: unit.rent,
+        deposit: unit.deposit,
+        furnished: unit.furnished,
+        features: unit.features,
+        availability: unit.availability
+      }));
+    }
+
+    // Calculate statistics
+    const stats = {
+      totalUnits: property.units.length,
+      available: property.units.filter(u => u.availability === 'available').length,
+      occupied: property.units.filter(u => u.availability === 'occupied').length,
+      maintenance: property.units.filter(u => u.availability === 'maintenance').length,
+      totalMonthlyRent: property.units.reduce((sum, u) => sum + (u.rent || 0), 0),
+      currentMonthlyIncome: property.units
+        .filter(u => u.availability === 'occupied')
+        .reduce((sum, u) => sum + (u.rent || 0), 0)
+    };
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        property: {
+          _id: property._id,
+          title: property.title,
+          propertyType: property.propertyType,
+          location: property.location,
+          agent: property.agent
+        },
+        units,
+        stats
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get available units for a property
+// @route   GET /api/properties/:id/available-units
+// @access  Public
+exports.getAvailableUnits = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id)
+      .populate('agent', 'firstName lastName businessName phone email');
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    if (!property.hasUnits) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'This property does not have multiple units'
+      });
+    }
+
+    const availableUnits = property.units.filter(unit => unit.availability === 'available');
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        property: {
+          _id: property._id,
+          title: property.title,
+          propertyType: property.propertyType,
+          location: property.location,
+          images: property.images,
+          features: property.features,
+          agent: property.agent
+        },
+        availableUnits,
+        totalAvailable: availableUnits.length,
+        totalUnits: property.units.length
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update a specific unit
+// @route   PATCH /api/properties/:id/units/:unitId
+// @access  Private (Agent/Employee/Admin)
+exports.updateUnit = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isCreator = property.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized to update this unit'
+      });
+    }
+
+    const unit = property.units.id(req.params.unitId);
+    if (!unit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Unit not found'
+      });
+    }
+
+    // Don't allow updating tenant info directly (use occupy/vacate endpoints)
+    delete req.body.tenant;
+    delete req.body.leaseStart;
+    delete req.body.leaseEnd;
+
+    // Update unit fields
+    Object.assign(unit, req.body);
+    await property.save();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Unit updated successfully',
+      data: { unit }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete a unit
+// @route   DELETE /api/properties/:id/units/:unitId
+// @access  Private (Agent/Admin)
+exports.deleteUnit = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized to delete this unit'
+      });
+    }
+
+    const unit = property.units.id(req.params.unitId);
+    if (!unit) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Unit not found'
+      });
+    }
+
+    // Check if unit is occupied
+    if (unit.availability === 'occupied') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Cannot delete an occupied unit. Please vacate the unit first.'
+      });
+    }
+
+    property.units.pull(req.params.unitId);
+    await property.save();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Unit deleted successfully',
+      data: { remainingUnits: property.units.length }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Mark unit as occupied
+// @route   PATCH /api/properties/:id/units/:unitId/occupy
+// @access  Private (Agent/Employee/Admin)
+exports.occupyUnit = async (req, res, next) => {
+  try {
+    const { tenantId, leaseStart, leaseEnd } = req.body;
+
+    if (!tenantId || !leaseStart || !leaseEnd) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Tenant ID, lease start, and lease end dates are required'
+      });
+    }
+
+    const property = await Property.findById(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isCreator = property.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized to manage this unit'
+      });
+    }
+
+    // Verify tenant exists
+    const tenant = await User.findById(tenantId);
+    if (!tenant) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Tenant not found'
+      });
+    }
+
+    await property.occupyUnit(req.params.unitId, tenantId, leaseStart, leaseEnd);
+    await property.populate('units.tenant', 'firstName lastName email phone');
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Unit marked as occupied successfully',
+      data: { 
+        property,
+        unit: property.units.id(req.params.unitId)
+      }
+    });
+  } catch (error) {
+    if (error.message === 'Unit not found' || error.message === 'Unit is not available') {
+      return res.status(400).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
+// @desc    Mark unit as vacant
+// @route   PATCH /api/properties/:id/units/:unitId/vacate
+// @access  Private (Agent/Employee/Admin)
+exports.vacateUnit = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isCreator = property.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized to manage this unit'
+      });
+    }
+
+    await property.vacateUnit(req.params.unitId);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Unit marked as vacant successfully',
+      data: { 
+        property,
+        unit: property.units.id(req.params.unitId)
+      }
+    });
+  } catch (error) {
+    if (error.message === 'Unit not found') {
+      return res.status(400).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
+// @desc    Bulk add units (for initial setup)
+// @route   POST /api/properties/:id/units/bulk
+// @access  Private (Agent/Admin)
+exports.bulkAddUnits = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized'
+      });
+    }
+
+    const { startFloor, endFloor, unitsPerFloor, baseRent, template } = req.body;
+
+    if (!startFloor || !endFloor || !unitsPerFloor || !baseRent) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Start floor, end floor, units per floor, and base rent are required'
+      });
+    }
+
+    property.hasUnits = true;
+    const addedUnits = [];
+
+    // Generate units
+    for (let floor = startFloor; floor <= endFloor; floor++) {
+      for (let unitNum = 1; unitNum <= unitsPerFloor; unitNum++) {
+        const unitData = {
+          unitNumber: `${floor}${String.fromCharCode(64 + unitNum)}`, // e.g., 1A, 1B, 2A, 2B
+          floor: floor,
+          bedrooms: template?.bedrooms || 2,
+          bathrooms: template?.bathrooms || 1,
+          area: template?.area || 50,
+          rent: baseRent,
+          deposit: template?.deposit || baseRent,
+          furnished: template?.furnished || false,
+          features: template?.features || [],
+          availability: 'available'
+        };
+
+        property.units.push(unitData);
+        addedUnits.push(unitData);
+      }
+    }
+
+    await property.save();
+
+    res.status(201).json({
+      status: 'success',
+      message: `${addedUnits.length} units created successfully`,
+      data: {
+        addedUnits: addedUnits.length,
+        totalUnits: property.units.length,
+        units: addedUnits
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get unit statistics for a property
+// @route   GET /api/properties/:id/units/stats
+// @access  Private (Agent/Employee/Admin)
+exports.getUnitStats = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id)
+      .populate('units.tenant', 'firstName lastName email');
+
+    if (!property) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Check ownership
+    const isOwner = property.agent.toString() === req.user._id.toString();
+    const isCreator = property.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isCreator && !isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Not authorized'
+      });
+    }
+
+    if (!property.hasUnits) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'This property does not have multiple units'
+      });
+    }
+
+    // Calculate statistics
+    const stats = {
+      totalUnits: property.units.length,
+      available: property.units.filter(u => u.availability === 'available').length,
+      occupied: property.units.filter(u => u.availability === 'occupied').length,
+      maintenance: property.units.filter(u => u.availability === 'maintenance').length,
+      occupancyRate: property.units.length > 0 
+        ? ((property.units.filter(u => u.availability === 'occupied').length / property.units.length) * 100).toFixed(2)
+        : 0,
+      totalPotentialRent: property.units.reduce((sum, u) => sum + (u.rent || 0), 0),
+      currentMonthlyIncome: property.units
+        .filter(u => u.availability === 'occupied')
+        .reduce((sum, u) => sum + (u.rent || 0), 0),
+      lostRevenue: property.units
+        .filter(u => u.availability !== 'occupied')
+        .reduce((sum, u) => sum + (u.rent || 0), 0),
+      averageRentPerUnit: property.units.length > 0
+        ? (property.units.reduce((sum, u) => sum + (u.rent || 0), 0) / property.units.length).toFixed(2)
+        : 0,
+      unitsByFloor: {}
+    };
+
+    // Group units by floor
+    property.units.forEach(unit => {
+      const floor = unit.floor || 'Ground';
+      if (!stats.unitsByFloor[floor]) {
+        stats.unitsByFloor[floor] = {
+          total: 0,
+          available: 0,
+          occupied: 0,
+          maintenance: 0
+        };
+      }
+      stats.unitsByFloor[floor].total++;
+      stats.unitsByFloor[floor][unit.availability]++;
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: { stats }
+    });
+  } catch (error) {
+    next(error);
+  }
+};

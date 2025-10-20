@@ -43,6 +43,7 @@
     "author": "Your Name",
     "license": "MIT",
     "dependencies": {
+        "lucide-react": "^0.546.0",
         "nodemailer": "^7.0.9"
     }
 }

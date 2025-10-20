@@ -1,5 +1,73 @@
 const mongoose = require('mongoose');
 
+// Unit Sub-Schema
+const unitSchema = new mongoose.Schema({
+  unitNumber: {
+    type: String,
+    required: [true, 'Unit number is required'],
+    trim: true
+  },
+  floor: {
+    type: Number,
+    default: null
+  },
+  bedrooms: {
+    type: Number,
+    min: [0, 'Bedrooms cannot be negative'],
+    default: 0
+  },
+  bathrooms: {
+    type: Number,
+    min: [0, 'Bathrooms cannot be negative'],
+    default: 0
+  },
+  area: {
+    type: Number,
+    min: [0.01, 'Area must be greater than 0']
+  },
+  rent: {
+    type: Number,
+    required: [true, 'Rent is required for each unit'],
+    min: [0, 'Rent cannot be negative']
+  },
+  deposit: {
+    type: Number,
+    default: 0,
+    min: [0, 'Deposit cannot be negative']
+  },
+  furnished: {
+    type: Boolean,
+    default: false
+  },
+  features: [{
+    type: String
+  }],
+  availability: {
+    type: String,
+    enum: ['available', 'occupied', 'maintenance'],
+    default: 'available'
+  },
+  tenant: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  leaseStart: {
+    type: Date,
+    default: null
+  },
+  leaseEnd: {
+    type: Date,
+    default: null
+  },
+  notes: {
+    type: String,
+    trim: true
+  }
+}, {
+  timestamps: true
+});
+
 const propertySchema = new mongoose.Schema({
   title: {
     type: String,
@@ -43,13 +111,22 @@ const propertySchema = new mongoose.Schema({
     ]
   },
   
-  // Pricing
+  // ✅ NEW: Property can have multiple units
+  hasUnits: {
+    type: Boolean,
+    default: false,
+    comment: 'True for properties with multiple rentable units (apartments, hostels, etc.)'
+  },
+  
+  units: [unitSchema],
+  
+  // Pricing (for properties without units)
   rent: {
     type: Number,
     min: [0, 'Rent cannot be negative'],
     required: function() {
-      // Rent is required for non-land types
-      return !['land', 'plot', 'farm'].includes(this.propertyType);
+      // Rent is required only if property has NO units and is not land
+      return !this.hasUnits && !['land', 'plot', 'farm'].includes(this.propertyType);
     }
   },
   deposit: {
@@ -71,7 +148,7 @@ const propertySchema = new mongoose.Schema({
     default: 'total'
   },
   
-  // Basic Property Details
+  // Basic Property Details (for properties without units)
   bedrooms: {
     type: Number,
     min: [0, 'Bedrooms cannot be negative'],
@@ -89,7 +166,6 @@ const propertySchema = new mongoose.Schema({
   },
   
   // Dynamic Fields for Different Property Types
-  // Apartment/Office specific
   floor: {
     type: Number,
     default: null
@@ -98,32 +174,26 @@ const propertySchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  
-  // House/Land specific
   plotSize: {
-    type: Number, // in acres
+    type: Number,
     min: [0.01, 'Plot size must be greater than 0']
   },
   landSize: {
-    type: Number, // in acres
+    type: Number,
     min: [0.01, 'Land size must be greater than 0']
   },
   farmSize: {
-    type: Number, // in acres
+    type: Number,
     min: [0.01, 'Farm size must be greater than 0']
   },
   compound: {
     type: String,
     trim: true
   },
-  
-  // Maisonette specific
   floors: {
     type: Number,
     min: [1, 'Must have at least 1 floor']
   },
-  
-  // Shared facilities (for bedsitter/single room)
   sharedBathroom: {
     type: Boolean,
     default: false
@@ -132,8 +202,6 @@ const propertySchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
-  // Commercial specific
   businessType: {
     type: String,
     trim: true
@@ -149,8 +217,6 @@ const propertySchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
-  // Shop specific
   shopType: {
     type: String,
     trim: true
@@ -163,8 +229,6 @@ const propertySchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
-  // Warehouse specific
   warehouseType: {
     type: String,
     trim: true
@@ -174,10 +238,8 @@ const propertySchema = new mongoose.Schema({
     default: false
   },
   ceilingHeight: {
-    type: Number // in meters
+    type: Number
   },
-  
-  // Hostel specific
   sharedFacilities: {
     type: String,
     trim: true
@@ -189,14 +251,10 @@ const propertySchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  
-  // Service Apartment specific
   servicesIncluded: {
     type: String,
     trim: true
   },
-  
-  // Land specific
   zoning: {
     type: String,
     trim: true
@@ -253,11 +311,9 @@ const propertySchema = new mongoose.Schema({
   features: [{
     type: String,
     enum: [
-      // Regular property features
       'parking', 'garden', 'swimming_pool', 'gym', 'security',
       'elevator', 'balcony', 'furnished', 'air_conditioning',
       'internet', 'water_backup', 'generator',
-      // Land features
       'fenced', 'water_connection', 'electricity', 'road_access',
       'title_deed', 'near_tarmac', 'agricultural', 'residential_zoning',
       'commercial_zoning', 'water_source', 'fertile_soil', 'irrigation'
@@ -278,7 +334,7 @@ const propertySchema = new mongoose.Schema({
     default: false
   },
   
-  // Status
+  // ✅ UPDATED: Status - automatically calculated based on units
   availability: {
     type: String,
     enum: ['available', 'occupied', 'maintenance', 'unavailable'],
@@ -300,8 +356,6 @@ const propertySchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
-  
-  // Created by (to track if employee created it)
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -354,7 +408,7 @@ const propertySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes for faster queries
+// Indexes
 propertySchema.index({ agent: 1 });
 propertySchema.index({ createdBy: 1 });
 propertySchema.index({ tenant: 1 });
@@ -369,6 +423,8 @@ propertySchema.index({ createdAt: -1 });
 propertySchema.index({ featured: 1, createdAt: -1 });
 propertySchema.index({ approvalStatus: 1 });
 propertySchema.index({ approved: 1 });
+propertySchema.index({ hasUnits: 1 });
+propertySchema.index({ 'units.availability': 1 });
 
 // Compound indexes
 propertySchema.index({ propertyType: 1, 'location.city': 1, availability: 1 });
@@ -383,31 +439,75 @@ propertySchema.index({
   'location.city': 'text'
 });
 
-// Virtual for monthly income (if occupied)
+// ✅ NEW: Virtual for available units count
+propertySchema.virtual('availableUnitsCount').get(function() {
+  if (!this.hasUnits || !this.units) return 0;
+  return this.units.filter(unit => unit.availability === 'available').length;
+});
+
+// ✅ NEW: Virtual for total units count
+propertySchema.virtual('totalUnitsCount').get(function() {
+  if (!this.hasUnits || !this.units) return 0;
+  return this.units.length;
+});
+
+// ✅ NEW: Virtual for occupied units count
+propertySchema.virtual('occupiedUnitsCount').get(function() {
+  if (!this.hasUnits || !this.units) return 0;
+  return this.units.filter(unit => unit.availability === 'occupied').length;
+});
+
+// Virtual for monthly income
 propertySchema.virtual('monthlyIncome').get(function() {
+  if (this.hasUnits) {
+    return this.units
+      .filter(unit => unit.availability === 'occupied')
+      .reduce((sum, unit) => sum + (unit.rent || 0), 0);
+  }
   return this.availability === 'occupied' ? this.rent : 0;
 });
 
-// Virtual to check if it's a land type
+// ✅ NEW: Virtual for potential monthly income
+propertySchema.virtual('potentialMonthlyIncome').get(function() {
+  if (this.hasUnits) {
+    return this.units.reduce((sum, unit) => sum + (unit.rent || 0), 0);
+  }
+  return this.rent || 0;
+});
+
 propertySchema.virtual('isLandType').get(function() {
   return ['land', 'plot', 'farm'].includes(this.propertyType);
 });
 
-// Pre-save middleware to auto-approve if created by agent
+// ✅ NEW: Pre-save middleware to auto-update availability based on units
 propertySchema.pre('save', function(next) {
+  // Auto-approve if created by agent or admin
   if (this.isNew) {
-    // Auto-approve if created by agent or admin
     if (this.createdByRole === 'agent' || this.createdByRole === 'admin') {
       this.approved = true;
       this.approvalStatus = 'approved';
       this.approvedBy = this.createdBy;
       this.approvedAt = new Date();
     } else {
-      // Employee-created properties need approval
       this.approved = false;
       this.approvalStatus = 'pending';
     }
   }
+  
+  // ✅ Auto-update property availability based on units
+  if (this.hasUnits && this.units && this.units.length > 0) {
+    const availableUnits = this.units.filter(u => u.availability === 'available').length;
+    const maintenanceUnits = this.units.filter(u => u.availability === 'maintenance').length;
+    
+    if (availableUnits === 0 && maintenanceUnits === 0) {
+      this.availability = 'occupied'; // All units occupied
+    } else if (maintenanceUnits === this.units.length) {
+      this.availability = 'maintenance'; // All units under maintenance
+    } else {
+      this.availability = 'available'; // At least one unit available
+    }
+  }
+  
   next();
 });
 
@@ -445,6 +545,57 @@ propertySchema.methods.reject = function(approver, reason) {
   return this.save();
 };
 
+// ✅ NEW: Unit management methods
+propertySchema.methods.addUnit = function(unitData) {
+  this.units.push(unitData);
+  return this.save();
+};
+
+propertySchema.methods.updateUnit = function(unitId, updateData) {
+  const unit = this.units.id(unitId);
+  if (!unit) {
+    throw new Error('Unit not found');
+  }
+  Object.assign(unit, updateData);
+  return this.save();
+};
+
+propertySchema.methods.removeUnit = function(unitId) {
+  this.units.pull(unitId);
+  return this.save();
+};
+
+propertySchema.methods.occupyUnit = function(unitId, tenantId, leaseStart, leaseEnd) {
+  const unit = this.units.id(unitId);
+  if (!unit) {
+    throw new Error('Unit not found');
+  }
+  if (unit.availability !== 'available') {
+    throw new Error('Unit is not available');
+  }
+  
+  unit.availability = 'occupied';
+  unit.tenant = tenantId;
+  unit.leaseStart = leaseStart;
+  unit.leaseEnd = leaseEnd;
+  
+  return this.save();
+};
+
+propertySchema.methods.vacateUnit = function(unitId) {
+  const unit = this.units.id(unitId);
+  if (!unit) {
+    throw new Error('Unit not found');
+  }
+  
+  unit.availability = 'available';
+  unit.tenant = null;
+  unit.leaseStart = null;
+  unit.leaseEnd = null;
+  
+  return this.save();
+};
+
 // Static methods
 propertySchema.statics.findPendingApprovals = function() {
   return this.find({ approvalStatus: 'pending' })
@@ -455,6 +606,16 @@ propertySchema.statics.findPendingApprovals = function() {
 propertySchema.statics.findByAgent = function(agentId) {
   return this.find({ agent: agentId })
     .sort('-createdAt');
+};
+
+// ✅ NEW: Find properties with available units
+propertySchema.statics.findWithAvailableUnits = function() {
+  return this.find({
+    hasUnits: true,
+    'units.availability': 'available',
+    approved: true,
+    approvalStatus: 'approved'
+  }).sort('-createdAt');
 };
 
 const Property = mongoose.model('Property', propertySchema);

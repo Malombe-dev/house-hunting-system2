@@ -9,16 +9,70 @@ import {
   CameraIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
+import UnitManagementModal from '../modals/UnitManagementModal';
 
 const PropertyCard = ({ 
   property, 
   onSave, 
   isSaved = false, 
   showSaveButton = true,
-  className = '' 
+  className = '',
+  onPropertyUpdate // 🆕 Add this prop to refresh property list
 }) => {
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [showUnitModal, setShowUnitModal] = useState(false);
+  const [enablingUnits, setEnablingUnits] = useState(false); // 🆕 Loading state
+
+  // 🆕 Function to enable units for this property
+  const enableUnitsForProperty = async () => {
+    setEnablingUnits(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/properties/${property._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          hasUnits: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to enable units');
+      }
+
+      const result = await response.json();
+      console.log('Property updated:', result);
+      
+      // Refresh the property data
+      if (onPropertyUpdate) {
+        onPropertyUpdate();
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error enabling units:', error);
+      alert('Failed to enable units for this property');
+      return false;
+    } finally {
+      setEnablingUnits(false);
+    }
+  };
+
+  // 🆕 Handle the unit management button click
+  const handleUnitManagement = async () => {
+    // If property doesn't have units enabled yet, enable them first
+    if (!property.hasUnits) {
+      const success = await enableUnitsForProperty();
+      if (!success) return; // Stop if enabling failed
+    }
+    
+    // Now open the unit management modal
+    setShowUnitModal(true);
+  };
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-KE', {
@@ -122,6 +176,21 @@ const PropertyCard = ({
           </button>
         )}
 
+        {/* 🆕 UPDATED UNIT MANAGEMENT BUTTON */}
+        <button
+          onClick={handleUnitManagement}
+          disabled={enablingUnits}
+          className="absolute top-12 right-3 p-2 bg-white/90 hover:bg-white rounded-full shadow-sm transition-all duration-200 group-hover:scale-110 disabled:opacity-50"
+          title={property.hasUnits ? "Manage Units" : "Add Units to Property"}
+        >
+          <HomeIcon className="h-5 w-5 text-purple-600 hover:text-purple-700" />
+          {enablingUnits && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+            </div>
+          )}
+        </button>
+
         {/* Status Badge */}
         <div className="absolute top-3 left-3">
           <span className={`${getAvailabilityBadge(property.availability)} capitalize`}>
@@ -157,6 +226,12 @@ const PropertyCard = ({
             </h3>
             <div className="ml-2 text-xs text-gray-500 flex items-center">
               {getPropertyTypeIcon(property.propertyType)}
+              {/* 🆕 MULTI-UNIT BADGE */}
+              {property.hasUnits && (
+                <span className="ml-1 bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">
+                  Multi-unit
+                </span>
+              )}
             </div>
           </div>
           
@@ -228,6 +303,32 @@ const PropertyCard = ({
           </Link>
         </div>
 
+        {/* 🆕 ADD VISIBLE "ADD UNITS" BUTTON */}
+        <div className="mt-4">
+          <button
+            onClick={handleUnitManagement}
+            disabled={enablingUnits}
+            className="w-full flex items-center justify-center space-x-2 px-4 py-3 text-white font-semibold bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors disabled:bg-purple-400"
+          >
+            {enablingUnits ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span>Enabling Units...</span>
+              </>
+            ) : (
+              <>
+                <HomeIcon className="h-5 w-5" />
+                <span>{property.hasUnits ? "Manage Units" : "Add Units to This Property"}</span>
+              </>
+            )}
+          </button>
+          {!property.hasUnits && (
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Click to convert this property to multi-unit and add individual units
+            </p>
+          )}
+        </div>
+
         {/* Footer Info */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500">
           <div className="flex items-center space-x-1">
@@ -247,6 +348,23 @@ const PropertyCard = ({
           )}
         </div>
       </div>
+
+      {/* Unit Management Modal */}
+      {showUnitModal && (
+        <UnitManagementModal
+          propertyId={property._id}
+          property={property} // 🆕 Make sure to pass the property object
+          onClose={() => setShowUnitModal(false)}
+          onUnitsAdded={() => {
+            console.log('Units added successfully!');
+            setShowUnitModal(false);
+            // Refresh the property data
+            if (onPropertyUpdate) {
+              onPropertyUpdate();
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

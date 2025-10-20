@@ -39,6 +39,10 @@ const PropertyDetails = () => {
   const [showGallery, setShowGallery] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [showPriceModal, setShowPriceModal] = useState(false);
+  
+  // 🆕 NEW: State for units
+  const [availableUnits, setAvailableUnits] = useState([]);
+  const [selectedUnit, setSelectedUnit] = useState(null);
 
   // Fetch property details
   useEffect(() => {
@@ -62,6 +66,20 @@ const PropertyDetails = () => {
         const data = await response.json();
         if (data.status === 'success') {
           setProperty(data.data.property);
+          
+          // 🆕 NEW: If property has units, fetch available units
+          if (data.data.property.hasUnits) {
+            try {
+              const unitsResponse = await fetch(`${API_BASE_URL}/properties/${id}/available-units`);
+              const unitsData = await unitsResponse.json();
+              
+              if (unitsData.status === 'success') {
+                setAvailableUnits(unitsData.data.availableUnits);
+              }
+            } catch (unitsError) {
+              console.error('Error fetching units:', unitsError);
+            }
+          }
         } else {
           throw new Error(data.message || 'Failed to load property');
         }
@@ -158,6 +176,22 @@ const PropertyDetails = () => {
     }
   };
 
+  // 🆕 NEW: Handle unit-specific inquiry
+  const handleUnitInquiry = (unit = null) => {
+    if (!isAuthenticated) {
+      navigate('/auth/login', { state: { from: `/properties/${id}` } });
+      return;
+    }
+
+    // You can integrate this with your existing inquiry/application system
+    const unitInfo = unit ? `Unit ${unit.unitNumber}` : 'the property';
+    alert(`Inquiry submitted for ${unitInfo}. The agent will contact you soon.`);
+    
+    // TODO: Integrate with your actual inquiry API
+    // For example:
+    // submitInquiry({ propertyId: id, unitId: unit?._id, message: `Interested in ${unitInfo}` });
+  };
+
   const handleApply = async () => {
     if (!isAuthenticated) {
       navigate('/auth/login', { state: { from: `/properties/${id}` } });
@@ -175,7 +209,10 @@ const PropertyDetails = () => {
         },
         body: JSON.stringify({
           propertyId: id,
-          message: 'I am interested in this property and would like to schedule a viewing.'
+          unitId: selectedUnit?._id, // 🆕 NEW: Include unit if selected
+          message: selectedUnit 
+            ? `I am interested in Unit ${selectedUnit.unitNumber} and would like to schedule a viewing.`
+            : 'I am interested in this property and would like to schedule a viewing.'
         })
       });
 
@@ -185,6 +222,7 @@ const PropertyDetails = () => {
       }
 
       alert('Application submitted successfully! The agent will contact you soon.');
+      setSelectedUnit(null);
     } catch (error) {
       console.error('Error submitting application:', error);
       alert(error.message || 'Failed to submit application. Please try again.');
@@ -450,7 +488,6 @@ const PropertyDetails = () => {
         </div>
       )}
 
-      {/* Rest of the component remains the same... */}
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -506,18 +543,105 @@ const PropertyDetails = () => {
               </div>
             </div>
 
-            {/* Description with Better Styling */}
+            {/* 🆕 NEW: Available Units Section */}
+            {property.hasUnits && availableUnits.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <div className="h-1 w-12 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full"></div>
+                    Available Units ({availableUnits.length})
+                  </h2>
+                  <span className="px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
+                    {availableUnits.length} unit{availableUnits.length !== 1 ? 's' : ''} available
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {availableUnits.map((unit) => (
+                    <div 
+                      key={unit._id}
+                      className="group border-2 border-gray-200 hover:border-blue-400 rounded-xl p-5 transition-all duration-300 hover:shadow-lg bg-gradient-to-br from-white to-blue-50/30 cursor-pointer"
+                      onClick={() => setSelectedUnit(unit)}
+                    >
+                      {/* Unit Header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-1">
+                            Unit {unit.unitNumber}
+                          </h3>
+                          {unit.floor && (
+                            <p className="text-sm text-gray-600">Floor {unit.floor}</p>
+                          )}
+                        </div>
+                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                          Available
+                        </span>
+                      </div>
+
+                      {/* Unit Details */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                          <HomeIcon className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm text-gray-700">
+                            {unit.bedrooms} BR, {unit.bathrooms} BA
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                          <span className="text-sm text-gray-700">{unit.area} m²</span>
+                        </div>
+                        {unit.furnished && (
+                          <span className="col-span-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium inline-block w-fit">
+                            Furnished
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Price */}
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-xs text-gray-600 mb-1">Monthly Rent</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {formatPrice(unit.rent)}
+                            </p>
+                          </div>
+                        </div>
+                        {unit.deposit > 0 && (
+                          <p className="text-xs text-gray-500 mb-3">
+                            Deposit: {formatPrice(unit.deposit)}
+                          </p>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnitInquiry(unit);
+                          }}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                        >
+                          Inquire About This Unit
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Description Section */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <div className="h-1 w-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full"></div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <div className="h-1 w-12 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full"></div>
                 Description
               </h2>
-              <p className="text-gray-600 leading-relaxed text-lg whitespace-pre-wrap">
-                {property.description || 'No description available'}
+              <p className="text-gray-700 leading-relaxed text-lg">
+                {property.description || 'No description available for this property.'}
               </p>
             </div>
 
-            {/* Features with Modern Cards */}
+            {/* Features & Amenities */}
             {property.features && property.features.length > 0 && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
@@ -526,264 +650,208 @@ const PropertyDetails = () => {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {property.features.map((feature, index) => (
-                    <div key={index} className="group flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 rounded-xl transition-all duration-300 hover:scale-105">
-                      <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-                        <CheckCircleIcon className="h-5 w-5 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-800">{formatFeature(feature)}</span>
+                    <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0" />
+                      <span className="text-gray-700">{formatFeature(feature)}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Additional Details */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 hover:shadow-md transition-shadow">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <div className="h-1 w-12 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full"></div>
-                Additional Details
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {property.furnished !== undefined && (
-                  <div className="group p-6 border-2 border-gray-100 hover:border-purple-200 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-md bg-gradient-to-br from-white to-purple-50/30">
-                    <div className="text-sm text-gray-600 mb-2">Furnished</div>
-                    <div className="text-xl font-bold text-gray-900">
-                      {property.furnished ? '✓ Yes' : '✗ No'}
+            {/* Location Section */}
+            {property.location && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8 hover:shadow-md transition-shadow">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <div className="h-1 w-12 bg-gradient-to-r from-red-600 to-pink-600 rounded-full"></div>
+                  Location
+                </h2>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <MapPinIcon className="h-6 w-6 text-red-500" />
+                    <div>
+                      <p className="font-semibold text-gray-900">{property.location.address}</p>
+                      {property.location.city && (
+                        <p className="text-gray-600">{property.location.city}, {property.location.state}</p>
+                      )}
                     </div>
                   </div>
-                )}
-                {property.petsAllowed !== undefined && (
-                  <div className="group p-6 border-2 border-gray-100 hover:border-blue-200 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-md bg-gradient-to-br from-white to-blue-50/30">
-                    <div className="text-sm text-gray-600 mb-2">Pets Allowed</div>
-                    <div className="text-xl font-bold text-gray-900">
-                      {property.petsAllowed ? '✓ Yes' : '✗ No'}
+                  {/* Map placeholder - you can integrate with Google Maps or other mapping service */}
+                  <div className="h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <div className="text-center text-gray-500">
+                      <MapPinIcon className="h-12 w-12 mx-auto mb-2" />
+                      <p>Map View</p>
+                      <p className="text-sm">Interactive map would be displayed here</p>
                     </div>
-                  </div>
-                )}
-                {property.smokingAllowed !== undefined && (
-                  <div className="group p-6 border-2 border-gray-100 hover:border-orange-200 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-md bg-gradient-to-br from-white to-orange-50/30">
-                    <div className="text-sm text-gray-600 mb-2">Smoking Allowed</div>
-                    <div className="text-xl font-bold text-gray-900">
-                      {property.smokingAllowed ? '✓ Yes' : '✗ No'}
-                    </div>
-                  </div>
-                )}
-                <div className="group p-6 border-2 border-gray-100 hover:border-green-200 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-md bg-gradient-to-br from-white to-green-50/30">
-                  <div className="text-sm text-gray-600 mb-2">Availability</div>
-                  <div className="text-xl font-bold text-gray-900 capitalize">
-                    {property.availability || 'N/A'}
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Sidebar - Price & Contact */}
-          <div className="space-y-6">
-            {/* Enhanced Price Card */}
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 sticky top-8 text-white">
-              <div className="text-center mb-6">
-                <div className="text-sm font-medium text-blue-100 mb-2">Price</div>
-                <div className="text-5xl font-bold mb-2">
-                  {property.rent ? formatPrice(property.rent) : property.price ? formatPrice(property.price) : 'Contact'}
-                </div>
-                <div className="text-blue-100 text-lg">
-                  {property.rent ? 'per month' : ''}
-                </div>
-                {property.deposit && (
-                  <div className="mt-4 text-sm bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg inline-block">
-                    Deposit: {formatPrice(property.deposit)}
+          {/* Right Column - Sticky Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-8 space-y-6">
+              {/* Price Card */}
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+                <div className="text-center mb-6">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <CurrencyDollarIcon className="h-8 w-8 text-green-500" />
+                    <span className="text-3xl font-bold text-gray-900">
+                      {formatPrice(property.price)}
+                    </span>
                   </div>
-                )}
-              </div>
+                  {property.priceType && (
+                    <p className="text-gray-600 capitalize">{property.priceType}</p>
+                  )}
+                </div>
 
-              {property.availability === 'available' && property.approved ? (
                 <div className="space-y-4">
                   <button
                     onClick={handleApply}
                     disabled={applicationLoading}
-                    className="w-full px-6 py-4 bg-white text-blue-600 rounded-xl font-bold text-lg hover:bg-blue-50 transition-all duration-300 hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:shadow-2xl"
+                    className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-cyan-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {applicationLoading ? (
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                      <>
+                        <LoadingSpinner size="small" />
                         Submitting...
-                      </div>
+                      </>
                     ) : (
-                      'Apply Now'
+                      <>
+                        <CheckCircleIcon className="h-5 w-5" />
+                        Apply Now
+                      </>
                     )}
                   </button>
-                  
+
                   <button
                     onClick={() => setShowContact(true)}
-                    className="w-full px-6 py-4 bg-white/10 backdrop-blur-sm border-2 border-white/30 text-white rounded-xl font-bold text-lg hover:bg-white/20 transition-all duration-300"
+                    className="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
                   >
+                    <PhoneIcon className="h-5 w-5" />
                     Contact Agent
                   </button>
+
+                  <button
+                    onClick={handleSaveProperty}
+                    className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
+                  >
+                    {isSaved ? (
+                      <>
+                        <HeartSolidIcon className="h-5 w-5" />
+                        Saved
+                      </>
+                    ) : (
+                      <>
+                        <HeartIcon className="h-5 w-5" />
+                        Save Property
+                      </>
+                    )}
+                  </button>
                 </div>
-              ) : (
-                <div className="text-center p-6 bg-white/10 backdrop-blur-sm rounded-xl border-2 border-white/20">
-                  <XCircleIcon className="h-12 w-12 text-white mx-auto mb-3" />
-                  <div className="text-white font-bold text-lg mb-2">Not Available</div>
-                  <div className="text-blue-100 text-sm">
-                    {property.availability === 'occupied' ? 'This property is currently occupied' : 
-                     property.approved === false ? 'This property is pending approval' :
-                     'This property is not available'}
+              </div>
+
+              {/* Agent Info Card */}
+              {property.agent && (
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Listed By</h3>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
+                      <UserIcon className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{property.agent.name}</h4>
+                      <p className="text-gray-600 text-sm">{property.agent.company}</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        {[...Array(5)].map((_, i) => (
+                          <svg key={i} className="h-4 w-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                        <span className="text-sm text-gray-500 ml-1">(4.9)</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
+                      <PhoneIcon className="h-4 w-4" />
+                      Call Agent
+                    </button>
+                    <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors">
+                      <EnvelopeIcon className="h-4 w-4" />
+                      Send Message
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Quick Stats */}
-              <div className="mt-6 pt-6 border-t border-white/20 space-y-3 text-sm">
-                <div className="flex justify-between items-center text-blue-100">
-                  <span>Property ID</span>
-                  <span className="font-bold text-white">#{property._id?.slice(-6).toUpperCase() || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between items-center text-blue-100">
-                  <span>Last Updated</span>
-                  <span className="font-bold text-white">{formatDate(property.updatedAt)}</span>
-                </div>
-                <div className="flex justify-between items-center text-blue-100">
-                  <span>Views</span>
-                  <span className="font-bold text-white">{(property.views || 0).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Enhanced Agent Card */}
-            {property.agent && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all">
-                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <div className="h-1 w-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full"></div>
-                  Property Agent
-                </h3>
-                
-                <div className="flex items-start gap-4 mb-6">
-                  <div className="relative">
-                    <img
-                      src={property.agent.avatar || property.agent.image || '/api/placeholder/100/100'}
-                      alt={`${property.agent.firstName} ${property.agent.lastName}`}
-                      className="w-20 h-20 rounded-2xl object-cover ring-4 ring-blue-100"
-                      onError={(e) => e.target.src = '/api/placeholder/100/100'}
-                    />
-                    {property.agent.verified && (
-                      <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-1">
-                        <CheckCircleIcon className="h-4 w-4 text-white" />
-                      </div>
-                    )}
+              {/* Quick Facts */}
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Property Facts</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Property ID</span>
+                    <span className="font-semibold text-gray-900">{property._id?.slice(-8) || 'N/A'}</span>
                   </div>
-                  
-                  <div className="flex-1">
-                    <h4 className="font-bold text-gray-900 text-lg mb-1">
-                      {property.agent.firstName} {property.agent.lastName}
-                    </h4>
-                    
-                    {property.agent.businessName && (
-                      <div className="text-sm text-gray-600 mb-2 font-medium">
-                        {property.agent.businessName}
-                      </div>
-                    )}
-                    
-                    {property.agent.verified && (
-                      <span className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full font-medium">
-                        <CheckCircleIcon className="h-3 w-3" />
-                        Verified Agent
-                      </span>
-                    )}
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Type</span>
+                    <span className="font-semibold text-gray-900 capitalize">{property.propertyType?.replace('_', ' ') || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Availability</span>
+                    <span className="font-semibold text-green-600 capitalize">{property.availability || 'Available'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Listed</span>
+                    <span className="font-semibold text-gray-900">{formatDate(property.createdAt)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-gray-600">Views</span>
+                    <span className="font-semibold text-gray-900">{(property.views || 0).toLocaleString()}</span>
                   </div>
                 </div>
-
-                {showContact ? (
-                  <div className="space-y-3">
-                    {property.agent.phone && (
-                      <a
-                        href={`tel:${property.agent.phone}`}
-                        className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl font-bold transition-all duration-300 hover:scale-105 shadow-lg"
-                      >
-                        <PhoneIcon className="h-5 w-5" />
-                        <span>Call Now</span>
-                      </a>
-                    )}
-                    
-                    {property.agent.email && (
-                      <a
-                        href={`mailto:${property.agent.email}?subject=Inquiry about ${property.title}&body=Hi, I'm interested in this property and would like to know more details.`}
-                        className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-bold transition-all duration-300 hover:scale-105 shadow-lg"
-                      >
-                        <EnvelopeIcon className="h-5 w-5" />
-                        <span>Send Email</span>
-                      </a>
-                    )}
-                    
-                    <button
-                      onClick={() => setShowContact(false)}
-                      className="text-sm text-gray-500 hover:text-gray-700 w-full text-center py-2"
-                    >
-                      Hide contact info
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowContact(true)}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 border-2 border-gray-200 text-gray-700 rounded-xl font-bold transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
-                  >
-                    <UserIcon className="h-5 w-5" />
-                    Show Contact Info
-                  </button>
-                )}
               </div>
-            )}
-
-            {/* Safety Badge */}
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-6 text-center">
-              <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <CheckCircleIcon className="h-8 w-8 text-white" />
-              </div>
-              <h4 className="font-bold text-gray-900 mb-2">Verified Listing</h4>
-              <p className="text-sm text-gray-600">
-                This property has been verified and approved by our team for your safety.
-              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Add scrollbar hide styles */}
-      <style jsx>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.6s ease-in;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-slide-up {
-          animation: slideUp 0.3s ease-out;
-        }
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(100px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
+      {/* Contact Modal */}
+      {showContact && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-900">Contact Agent</h3>
+              <button
+                onClick={() => setShowContact(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg">
+                <PhoneIcon className="h-6 w-6 text-blue-600" />
+                <div>
+                  <p className="text-sm text-gray-600">Phone</p>
+                  <p className="font-semibold text-gray-900">+254 700 000 000</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
+                <EnvelopeIcon className="h-6 w-6 text-green-600" />
+                <div>
+                  <p className="text-sm text-gray-600">Email</p>
+                  <p className="font-semibold text-gray-900">agent@example.com</p>
+                </div>
+              </div>
+              <button className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                Send Message
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
