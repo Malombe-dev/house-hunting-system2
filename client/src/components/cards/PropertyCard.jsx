@@ -9,7 +9,7 @@ import {
   CameraIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
-import UnitManagementModal from '../modals/UnitManagementModal';
+import UnitManagementModal from '../modals/AddUnitsModal';
 
 const PropertyCard = ({ 
   property, 

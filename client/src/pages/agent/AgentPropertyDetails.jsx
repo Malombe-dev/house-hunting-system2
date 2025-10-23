@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import UnitManagementModal from '../../components/modals/UnitManagementModal';
+import UnitManagementDashboard from '../../components/modals/UnitManagementDashboard';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { 
   ArrowLeftIcon,
@@ -22,9 +22,12 @@ import {
   ChartBarIcon
 } from '@heroicons/react/24/outline';
 
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const AgentPropertyDetails = () => {
+
+
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -505,9 +508,7 @@ const AgentPropertyDetails = () => {
             </div>
           ) : (
             /* Units Management Tab */
-            <div>
-              <UnitManagementModal propertyId={id} property={property} />
-            </div>
+            <UnitManagementDashboard propertyId={id} property={property} />
           )}
         </div>
       </div>

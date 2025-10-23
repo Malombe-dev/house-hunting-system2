@@ -22,6 +22,11 @@ const CreatePropertyForm = () => {
     formData.append('description', data.description);
     formData.append('propertyType', data.propertyType);
     
+    // ✅ ADDED: Auto-detect hasUnits based on property type
+    const multiUnitTypes = ['apartment', 'hostel', 'maisonette', 'bungalow'];
+    const shouldHaveUnits = multiUnitTypes.includes(data.propertyType);
+    formData.append('hasUnits', shouldHaveUnits);
+    
     // Append pricing
     if (data.rent) formData.append('rent', data.rent);
     if (data.price) formData.append('price', data.price);
@@ -86,7 +91,8 @@ const CreatePropertyForm = () => {
     console.log('📤 Full form data structure:', {
       title: data.title,
       features: data.features,
-      propertyType: data.propertyType
+      propertyType: data.propertyType,
+      hasUnits: shouldHaveUnits 
     });
     
     return formData;
