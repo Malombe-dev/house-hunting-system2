@@ -565,35 +565,100 @@ propertySchema.methods.removeUnit = function(unitId) {
   return this.save();
 };
 
-propertySchema.methods.occupyUnit = function(unitId, tenantId, leaseStart, leaseEnd) {
+propertySchema.methods.occupyUnit = async function(unitId, tenantId, leaseStart, leaseEnd) {
+  console.log('🔧 occupyUnit called:', { unitId, tenantId });
+  
   const unit = this.units.id(unitId);
+  
   if (!unit) {
     throw new Error('Unit not found');
   }
+  
   if (unit.availability !== 'available') {
-    throw new Error('Unit is not available');
+    throw new Error(`Unit is not available. Current status: ${unit.availability}`);
   }
   
+  // Update unit status
   unit.availability = 'occupied';
   unit.tenant = tenantId;
   unit.leaseStart = leaseStart;
   unit.leaseEnd = leaseEnd;
+  unit.lastUpdated = new Date();
   
-  return this.save();
+  console.log('✅ Unit updated:', {
+    unitNumber: unit.unitNumber,
+    availability: unit.availability,
+    tenant: unit.tenant
+  });
+  
+  await this.save();
+  
+  
+  await this.updatePropertyAvailability();
+  
+  return unit;
 };
 
-propertySchema.methods.vacateUnit = function(unitId) {
+propertySchema.methods.vacateUnit = async function(unitId) {
+  console.log('🔧 vacateUnit called:', { unitId });
+  
   const unit = this.units.id(unitId);
+  
   if (!unit) {
     throw new Error('Unit not found');
   }
   
+  // Clear tenant info
   unit.availability = 'available';
   unit.tenant = null;
   unit.leaseStart = null;
   unit.leaseEnd = null;
+  unit.lastUpdated = new Date();
   
-  return this.save();
+  console.log('✅ Unit vacated:', {
+    unitNumber: unit.unitNumber,
+    availability: unit.availability
+  });
+  
+  await this.save();
+  
+
+  await this.updatePropertyAvailability();
+  
+  return unit;
+};
+
+propertySchema.methods.updatePropertyAvailability = async function() {
+  console.log('🔧 updatePropertyAvailability called');
+  
+  if (!this.hasUnits || this.units.length === 0) {
+    console.log('ℹ️ Single property, skipping auto-update');
+    return; // Single property, don't auto-update
+  }
+  
+  const totalUnits = this.units.length;
+  const availableUnits = this.units.filter(u => u.availability === 'available').length;
+  const occupiedUnits = this.units.filter(u => u.availability === 'occupied').length;
+  
+  console.log('📊 Unit stats:', {
+    total: totalUnits,
+    available: availableUnits,
+    occupied: occupiedUnits
+  });
+  
+  if (availableUnits === 0 && occupiedUnits > 0) {
+    // All units occupied
+    this.availability = 'occupied';
+    this.status = 'occupied';
+    console.log('✅ Property marked as FULLY OCCUPIED');
+  } else if (availableUnits > 0) {
+    // At least one unit available
+    this.availability = 'available';
+    this.status = 'available';
+    console.log('✅ Property marked as AVAILABLE');
+  }
+  
+  await this.save();
 };
 
 // Static methods
@@ -608,7 +673,7 @@ propertySchema.statics.findByAgent = function(agentId) {
     .sort('-createdAt');
 };
 
-// ✅ NEW: Find properties with available units
+
 propertySchema.statics.findWithAvailableUnits = function() {
   return this.find({
     hasUnits: true,
@@ -616,6 +681,18 @@ propertySchema.statics.findWithAvailableUnits = function() {
     approved: true,
     approvalStatus: 'approved'
   }).sort('-createdAt');
+};
+
+propertySchema.statics.findAvailableProperties = async function() {
+  return this.find({
+    $or: [
+      
+      { hasUnits: false, availability: 'available' },
+   
+      { hasUnits: true, 'units.availability': 'available' }
+    ],
+    approvalStatus: 'approved'
+  });
 };
 
 const Property = mongoose.model('Property', propertySchema);

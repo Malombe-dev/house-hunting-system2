@@ -10,13 +10,13 @@ const Lease = require('../models/Lease');
  * @route   POST /api/tenants
  * @access  Private (Agent/Employee with permission)
  */
-
 exports.createTenant = async (req, res, next) => {
   try {
     const {
       userId, // For existing seeker conversion
       userData, // For new user creation
       property,
+      unit, // 🆕 ADDED: Unit ID if property has units
       moveInDate,
       rentAmount,
       depositAmount,
@@ -32,6 +32,7 @@ exports.createTenant = async (req, res, next) => {
       userId,
       userData: userData ? { ...userData, password: '***' } : null,
       property,
+      unit, // 🆕 Log unit
       moveInDate,
       rentAmount,
       depositAmount
@@ -54,8 +55,33 @@ exports.createTenant = async (req, res, next) => {
       });
     }
 
-    // Check if property is available
-    if (propertyDoc.availability !== 'available' && propertyDoc.status !== 'available') {
+    // 🆕 VALIDATION: If property has units, unit must be specified
+    if (propertyDoc.hasUnits && !unit) {
+      return res.status(400).json({
+        success: false,
+        message: 'Unit selection required for multi-unit property'
+      });
+    }
+
+    // 🆕 VALIDATION: Check if specified unit exists and is available
+    if (unit) {
+      const unitDoc = propertyDoc.units.id(unit);
+      if (!unitDoc) {
+        return res.status(404).json({
+          success: false,
+          message: 'Unit not found'
+        });
+      }
+      if (unitDoc.availability !== 'available') {
+        return res.status(400).json({
+          success: false,
+          message: `Unit ${unitDoc.unitNumber} is not available (Status: ${unitDoc.availability})`
+        });
+      }
+    }
+
+    // For single properties, check availability
+    if (!propertyDoc.hasUnits && propertyDoc.availability !== 'available') {
       return res.status(400).json({
         success: false,
         message: 'Property is not available for rent'
@@ -112,16 +138,14 @@ exports.createTenant = async (req, res, next) => {
         email: userData.email,
         phone: userData.phone,
         idNumber: userData.idNumber,
-        password: userData.password, // Auto-generated password from frontend
+        password: userData.password,
         role: 'tenant',
-        mustChangePassword: true, // CRITICAL: Force password change on first login
+        mustChangePassword: true,
         isActive: true,
         verified: false
       });
 
       console.log('✅ Created new tenant user with mustChangePassword=true');
-      console.log('   - Email:', tenantUser.email);
-      console.log('   - Must change password:', tenantUser.mustChangePassword);
 
     } else {
       return res.status(400).json({
@@ -135,12 +159,12 @@ exports.createTenant = async (req, res, next) => {
     const lease = await Lease.create({
       property: property,
       tenant: tenantUser._id,
-      agent: req.user._id, // Current logged in agent
+      agent: req.user._id,
       startDate: new Date(leaseStartDate),
       endDate: new Date(leaseEndDate),
       rentAmount: parseFloat(rentAmount),
       depositAmount: parseFloat(depositAmount),
-      paymentDueDate: 1, // Default to 1st of month
+      paymentDueDate: 1,
       status: 'pending',
       signedByAgent: true,
       agentSignatureDate: new Date()
@@ -149,7 +173,7 @@ exports.createTenant = async (req, res, next) => {
 
     // Create tenant record
     console.log('👤 Creating tenant record');
-    const tenant = await Tenant.create({
+    const tenantData = {
       user: tenantUser._id,
       property: property,
       lease: lease._id,
@@ -163,14 +187,53 @@ exports.createTenant = async (req, res, next) => {
       references: references || [],
       createdBy: req.user._id,
       agent: req.user._id
-    });
+    };
+
+    // 🆕 ADD: Include unit in tenant record if specified
+    if (unit) {
+      tenantData.unit = unit;
+    }
+
+    const tenant = await Tenant.create(tenantData);
     console.log('✅ Tenant created:', tenant._id);
 
-    // Update property availability
-    propertyDoc.availability = 'occupied';
-    propertyDoc.status = 'occupied';
-    await propertyDoc.save();
-    console.log('✅ Property marked as rented');
+    // 🆕 CRITICAL FIX: Update unit/property status
+    if (unit) {
+      // Multi-unit property: Mark specific unit as occupied
+      console.log('🏠 Marking unit as occupied:', unit);
+      
+      try {
+        await propertyDoc.occupyUnit(
+          unit,
+          tenantUser._id,
+          new Date(leaseStartDate),
+          new Date(leaseEndDate)
+        );
+        console.log('✅ Unit marked as occupied successfully');
+        
+        // The occupyUnit method will automatically update property availability
+        // if all units are occupied
+        
+      } catch (unitError) {
+        console.error('❌ Failed to occupy unit:', unitError);
+        // Rollback: Delete tenant and lease
+        await Tenant.findByIdAndDelete(tenant._id);
+        await Lease.findByIdAndDelete(lease._id);
+        
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to occupy unit: ' + unitError.message
+        });
+      }
+      
+    } else {
+      // Single property: Mark entire property as occupied
+      console.log('🏠 Marking single property as occupied');
+      propertyDoc.availability = 'occupied';
+      propertyDoc.status = 'occupied';
+      await propertyDoc.save();
+      console.log('✅ Property marked as occupied');
+    }
 
     // Populate tenant data for response
     const populatedTenant = await Tenant.findById(tenant._id)
@@ -184,7 +247,6 @@ exports.createTenant = async (req, res, next) => {
       success: true,
       message: 'Tenant created successfully',
       tenant: populatedTenant,
-      // Include user info for password notification
       userCreated: !userId,
       userEmail: tenantUser.email,
       mustChangePassword: tenantUser.mustChangePassword
@@ -195,6 +257,7 @@ exports.createTenant = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // @desc    Get all tenants
 // @route   GET /api/tenants

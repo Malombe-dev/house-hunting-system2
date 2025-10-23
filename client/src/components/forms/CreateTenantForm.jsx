@@ -389,128 +389,113 @@ useEffect(() => {
     setIsPropertyDropdownOpen(true);
   };
 
-  const onSubmit = async (data) => {
-    setIsLoading(true);
-    try {
-      if (!selectedProperty) {
-        alert('Please select a property');
-        setIsLoading(false);
-        return;
-      }
 
-      if (selectedProperty.hasUnits && !selectedUnit) {
-        alert('Please select a unit for this property');
-        setIsLoading(false);
-        return;
-      }
-  
-      // Step 1: Create tenant account
-      let requestData = {
-        property: data.property,
-        moveInDate: data.moveInDate,
-        rentAmount: parseFloat(data.rentAmount),
-        depositAmount: parseFloat(data.depositAmount),
-        leaseStartDate: data.leaseStartDate,
-        leaseEndDate: data.leaseEndDate,
-        leaseDuration: parseInt(data.leaseDuration),
-        emergencyContact: {
-          name: data.emergencyContactName,
-          phone: data.emergencyContactPhone,
-          relationship: data.emergencyContactRelationship
-        }
-      };
 
-      if (selectedUnit) {
-        requestData.unit = data.unit;
-      }
-  
-      if (data.occupation || data.employerName) {
-        requestData.employmentInfo = {
-          occupation: data.occupation,
-          employerName: data.employerName,
-          employerPhone: data.employerPhone
-        };
-      }
-  
-      if (data.referenceName || data.referencePhone) {
-        requestData.references = [{
-          name: data.referenceName,
-          phone: data.referencePhone,
-          relationship: data.referenceRelationship
-        }];
-      }
-  
-      if (selectedOption === 'existing' && data.userId) {
-        requestData.userId = data.userId;
-      } else {
-        requestData.userData = {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          phone: data.phone,
-          idNumber: data.idNumber,
-          password: generatedPassword,
-          mustChangePassword: true
-        };
-      }
-  
-      console.log('🚀 Step 1: Creating tenant account...');
-      const tenantResponse = await api.post('/tenants', requestData);
-      
-      console.log('✅ Tenant created:', tenantResponse);
-
-      // Step 2: If unit selected, mark it as occupied
-      if (selectedUnit && tenantResponse.tenant) {
-        try {
-          console.log('🏠 Step 2: Occupying unit...');
-          const occupyData = {
-            tenantId: tenantResponse.tenant.userId || tenantResponse.tenant._id,
-            leaseStart: data.leaseStartDate,
-            leaseEnd: data.leaseEndDate
-          };
-
-          await api.patch(
-            `/properties/${selectedProperty._id}/units/${selectedUnit._id}/occupy`,
-            occupyData
-          );
-          
-          console.log('✅ Unit marked as occupied');
-        } catch (occupyError) {
-          console.error('⚠️ Warning: Tenant created but unit occupation failed:', occupyError);
-          // Continue - tenant was created successfully
-        }
-      }
-
-      // Success!
-      const unitInfo = selectedUnit ? ` - Unit ${selectedUnit.unitNumber}` : '';
-      const message = selectedOption === 'existing' 
-        ? `Seeker converted to tenant successfully!${unitInfo}`
-        : `Tenant account created successfully!${unitInfo}\n\nLogin Credentials:\nEmail: ${data.email}\nPassword: ${generatedPassword}\n\n(Password copied to clipboard)`;
-      
-      if (selectedOption === 'new') {
-        await navigator.clipboard.writeText(generatedPassword);
-      }
-      
-      alert(message);
-      onSuccess && onSuccess(tenantResponse.tenant || tenantResponse);
-  
-    } catch (error) {
-      console.error('❌ CREATE TENANT ERROR:', error);
-      
-      if (error.response) {
-        const errorMessage = error.response.data?.message || 
-                            error.response.data?.error ||
-                            `Server error: ${error.response.status}`;
-        alert(errorMessage);
-      } else if (error.request) {
-        alert('Network error: No response from server. Please check your connection.');
-      } else {
-        alert(`Request failed: ${error.message}`);
-      }
-    } finally {
+const onSubmit = async (data) => {
+  setIsLoading(true);
+  try {
+    if (!selectedProperty) {
+      alert('Please select a property');
       setIsLoading(false);
+      return;
     }
-  };
+
+    if (selectedProperty.hasUnits && !selectedUnit) {
+      alert('Please select a unit for this property');
+      setIsLoading(false);
+      return;
+    }
+
+    // Build request data
+    let requestData = {
+      property: data.property,
+      moveInDate: data.moveInDate,
+      rentAmount: parseFloat(data.rentAmount),
+      depositAmount: parseFloat(data.depositAmount),
+      leaseStartDate: data.leaseStartDate,
+      leaseEndDate: data.leaseEndDate,
+      leaseDuration: parseInt(data.leaseDuration),
+      emergencyContact: {
+        name: data.emergencyContactName,
+        phone: data.emergencyContactPhone,
+        relationship: data.emergencyContactRelationship
+      }
+    };
+
+    // 🆕 IMPORTANT: Include unit if selected
+    if (selectedUnit) {
+      requestData.unit = data.unit;
+      console.log('📦 Including unit in request:', data.unit);
+    }
+
+    if (data.occupation || data.employerName) {
+      requestData.employmentInfo = {
+        occupation: data.occupation,
+        employerName: data.employerName,
+        employerPhone: data.employerPhone
+      };
+    }
+
+    if (data.referenceName || data.referencePhone) {
+      requestData.references = [{
+        name: data.referenceName,
+        phone: data.referencePhone,
+        relationship: data.referenceRelationship
+      }];
+    }
+
+    if (selectedOption === 'existing' && data.userId) {
+      requestData.userId = data.userId;
+    } else {
+      requestData.userData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        phone: data.phone,
+        idNumber: data.idNumber,
+        password: generatedPassword,
+        mustChangePassword: true
+      };
+    }
+
+    console.log('🚀 Creating tenant (backend handles unit occupation)...');
+    console.log('📦 Request data:', JSON.stringify(requestData, null, 2));
+    
+    // ✅ SIMPLIFIED: Single API call - backend handles everything
+    const response = await api.post('/tenants', requestData);
+    
+    console.log('✅ Tenant creation response:', response);
+
+    // Success handling
+    const unitInfo = selectedUnit ? ` - Unit ${selectedUnit.unitNumber}` : '';
+    const message = selectedOption === 'existing' 
+      ? `Seeker converted to tenant successfully!${unitInfo}`
+      : `Tenant account created successfully!${unitInfo}\n\nLogin Credentials:\nEmail: ${data.email}\nPassword: ${generatedPassword}\n\n(Password copied to clipboard)`;
+    
+    if (selectedOption === 'new') {
+      await navigator.clipboard.writeText(generatedPassword);
+    }
+    
+    alert(message);
+    onSuccess && onSuccess(response.tenant || response);
+
+  } catch (error) {
+    console.error('❌ CREATE TENANT ERROR:', error);
+    
+    let errorMessage = 'An error occurred while creating tenant';
+    
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    alert(errorMessage);
+    
+  } finally {
+    setIsLoading(false);
+  }
+};
 
 
   return (
